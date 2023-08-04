@@ -1,0 +1,107 @@
+[
+  {
+    "bytes": 47560,
+    "last_modified": "2020-12-03T10:14:40.049830",
+    "hash": "bd3593e317e71fd9992405f29475afd4",
+    "name": "swift-4-0754ea",
+    "content_type": "application/octet-stream"
+  },
+  {
+    "bytes": 47908,
+    "last_modified": "2020-12-03T10:14:40.445070",
+    "hash": "393e2f15d696bd00bca737f0849d19b8",
+    "name": "swift-4-4a35d8",
+    "content_type": "application/octet-stream"
+  },
+  {
+    "bytes": 9774,
+    "last_modified": "2021-08-12T10:18:26.896430",
+    "hash": "a18d6042708af12fa062a3774011857e",
+    "name": "swift-4-0a17ba",
+    "content_type": "application/octet-stream"
+  },
+  {
+    "bytes": 9774,
+    "last_modified": "2021-08-12T08:22:29.216640",
+    "hash": "a28d6042708af12fa062a3774011857e",
+    "name": "swift-4-0bc86c",
+    "content_type": "application/octet-stream"
+  },
+  {
+    "bytes": 9774,
+    "last_modified": "2021-08-12T08:21:45.716170",
+    "hash": "a38d6042708af12fa062a3774011857e",
+    "name": "swift-4-1232df",
+    "content_type": "application/octet-stream"
+  },
+  {
+    "bytes": 9774,
+    "last_modified": "2021-08-12T08:22:33.742220",
+    "hash": "a48d6042708af12fa062a3774011857e",
+    "name": "swift-4-d4ef28",
+    "content_type": "application/octet-stream"
+  },
+  {
+    "bytes": 9774,
+    "last_modified": "2021-08-12T11:01:41.326260",
+    "hash": "a58d6042708af12fa062a3774011857e",
+    "name": "swift-4-161912",
+    "content_type": "application/octet-stream"
+  },
+  {
+    "bytes": 9774,
+    "last_modified": "2021-08-12T11:55:29.564600",
+    "hash": "a68d6042708af12fa062a3774011857e",
+    "name": "swift-4-161922",
+    "content_type": "application/octet-stream"
+  },
+  {
+    "bytes": 9774,
+    "last_modified": "2021-08-12T11:55:38.388110",
+    "hash": "a78d6042708af12fa062a3774011857e",
+    "name": "swift-4-161932",
+    "content_type": "application/octet-stream"
+  },
+  {
+    "bytes": 9025,
+    "last_modified": "2021-08-12T13:00:52.605650",
+    "hash": "f221594d872bc9073867c1f81685ee97",
+    "name": "swift-4-162011",
+    "content_type": "application/octet-stream"
+  },
+  {
+    "bytes": 9774,
+    "last_modified": "2021-08-16T16:47:44.416660",
+    "hash": "a88d6042708af12fa062a3774011857e",
+    "name": "swift-4-162012",
+    "content_type": "application/octet-stream"
+  },
+  {
+    "bytes": 9774,
+    "last_modified": "2021-08-16T17:27:30.791250",
+    "hash": "a98d6042708af12fa062a3774011857e",
+    "name": "swift-4-162013",
+    "content_type": "application/octet-stream"
+  },
+  {
+    "bytes": 5212,
+    "last_modified": "2021-07-16T18:27:41.198050",
+    "hash": "1e94d3f72cad17b2762cd010f7fdca0d",
+    "name": "swift-4-0189aa",
+    "content_type": "application/octet-stream"
+  },
+  {
+    "bytes": 9774,
+    "last_modified": "2021-08-06T10:28:00.312970",
+    "hash": "a11d6042708af12fa062a3774011857e",
+    "name": "swift-4-1132de",
+    "content_type": "application/octet-stream"
+  },
+  {
+    "bytes": 8443,
+    "last_modified": "2021-07-21T13:54:55.057450",
+    "hash": "d5da47a55f5a04363591643ea85e964a",
+    "name": "swift-4-608cdb",
+    "content_type": "application/octet-stream"
+  }
+]

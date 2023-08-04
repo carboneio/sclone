@@ -1,0 +1,24 @@
+{
+  "test": true,
+  "mode": "bidirectional",
+  "cacheFilename": "listFiles.cache.json",
+  "cron": "*/5 * * * *",
+  "integrityCheck": false,
+  "source": {
+    "name": "swift",
+    "authUrl": "https://auth.cloud.ovh.net/v3",
+    "username": "User-test-1234",
+    "password": "Password-12345",
+    "tenantName": "Tenant-1234",
+    "region": "GRA",
+    "bucket": "invoices"
+  },
+  "target": {
+    "name": "s3",
+    "accessKeyId"    : "access-key-id",
+    "secretAccessKey": "secret-access-key",
+    "url"            : "s3.gra.first.cloud.test",
+    "region"         : "gra",
+    "bucket"         : "invoices"
+  }
+}

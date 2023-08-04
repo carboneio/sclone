@@ -1,0 +1,21 @@
+{
+  "name": "sync-swift-s3",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "mocha ./tests",
+    "lint": "eslint --fix \"index.js\" \"tests/**/*.js\""
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "node-cron": "=3.0.2",
+    "tiny-storage-client": "=3.0.0"
+  },
+  "devDependencies": {
+    "eslint": "=8.46.0",
+    "mocha": "=10.2.0",
+    "nock": "=13.3.2"
+  }
+}
