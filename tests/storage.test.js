@@ -5,22 +5,19 @@ const path = require('path')
 const fs = require('fs')
 const helper = require('../helper');
 
-/**
- * TODO:
- * - [ ] List files S3/S3
- * - [ ] List files SWIFT/SWIFT
- */
-
 const files = {
   target        : new Map(),
   source        : new Map(),
   cache         : new Map(),
 }
 const urlS3 = 'https://s3.gra.first.cloud.test';
+const urlS3SBG = 'https://s3.sbg.first.cloud.test';
 
 const urlAuthSwift   = 'https://auth.cloud.ovh.net/v3';
 const urlSwift = 'https://storage.gra.cloud.ovh.net/v1/AUTH_ce3e510224d740a685cb0ae7bdb8ebc3';
+const urlSwiftSBG = 'https://storage.sbg.cloud.ovh.net/v1/AUTH_ce3e510224d740a685cb0ae7bdb8ebc3';
 const tokenAuthSwift = 'gAAAAABe8JlEGYPUwwOyjqgUBl11gSjDOw5VTtUZ5n8SWxghRGwakDkP_lelLfRctzyhbIFUXjsdPaGmV2xicL-9333lJUnL3M4JYlYCYMWsX3IhnLPYboyti835VdhAHQ7K_d0OC4OYvM04bvL3w_uSbkxPmL27uO0ISUgQdB_mHxoYlol8xYI'
+
 
 let _config = {}
 
@@ -211,14 +208,154 @@ describe("storage", function() {
   describe('fetchListFiles', function() {
 
     describe('Source: S3 / Target: S3', function() {
-      it.skip('should return the list of files from S3/S3 as Maps (paginate automatically)', function(done) {
-        done();
+
+      beforeEach(function (done) {
+
+        const nockAuthS3GRA = nock(urlS3)
+          .defaultReplyHeaders({ 'content-type': 'application/xml' })
+          .get('/')
+          .reply(200, () => {
+            return "<?xml version=\"1.0\" encoding=\"UTF-8\"?><ListAllMyBucketsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Owner><ID>89123456:user-feiowjfOEIJW</ID><DisplayName>12345678:user-feiowjfOEIJW</DisplayName></Owner><Buckets><Bucket><Name>invoices</Name><CreationDate>2023-02-27T11:46:24.000Z</CreationDate></Bucket></Buckets></ListAllMyBucketsResult>";
+          });
+        const nockAuthS3SBG = nock(urlS3SBG)
+          .defaultReplyHeaders({ 'content-type': 'application/xml' })
+          .get('/')
+          .reply(200, () => {
+            return "<?xml version=\"1.0\" encoding=\"UTF-8\"?><ListAllMyBucketsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Owner><ID>89123456:user-feiowjfOEIJW</ID><DisplayName>12345678:user-feiowjfOEIJW</DisplayName></Owner><Buckets><Bucket><Name>invoices</Name><CreationDate>2023-02-27T11:46:24.000Z</CreationDate></Bucket></Buckets></ListAllMyBucketsResult>";
+          });
+
+        helper.loadConfig('config.test-s3-s3.json', function(err, config) {
+          assert.strictEqual(err, null);
+          _config = config;
+          storage.connection(_config, 'source', function(err) {
+            assert.strictEqual(err, undefined);
+            storage.connection(_config, 'target', function(err) {
+              assert.strictEqual(err, undefined);
+              assert.strictEqual(nockAuthS3SBG.pendingMocks().length, 0);
+              assert.strictEqual(nockAuthS3GRA.pendingMocks().length, 0);
+              done();
+            })
+          })
+        })
+      })
+
+      it('should return the list of files from S3/S3 as Maps (paginate automatically)', function(done) {
+
+        const nockListFilesS3 = nock(urlS3)
+          .defaultReplyHeaders({ 'content-type': 'application/xml' })
+          .get('/invoices')
+          .query({ 'list-type' : '2' })
+          .reply(200, () => {
+            return fs.readFileSync(path.join(__dirname, "assets", "listFiles.s3.paginate.xml"));
+          })
+          .get('/invoices')
+          .query({ 'list-type' : '2', "start-after": "s3-2-paginate-document-5.pdf" })
+          .reply(200, () => {
+            return fs.readFileSync(path.join(__dirname, "assets", "listFiles.s3.xml"));
+          });
+
+        const nockListFilesS3SBG = nock(urlS3SBG)
+          .defaultReplyHeaders({ 'content-type': 'application/xml' })
+          .get('/invoices')
+          .query({ 'list-type' : '2' })
+          .reply(200, () => {
+            return fs.readFileSync(path.join(__dirname, "assets", "listFiles.s3.xml"));
+          });
+
+        storage.fetchListFiles(files, function(err) {
+          assert.strictEqual(err, undefined);
+          assert.strictEqual(nockListFilesS3.pendingMocks().length, 0);
+          assert.strictEqual(nockListFilesS3SBG.pendingMocks().length, 0);
+          assert.strictEqual(files.target.size, 5);
+          assert.strictEqual(files.source.size, 10);
+          assert.strictEqual(files.cache.size, 0);
+          for (const [key, value] of files.source) {
+            assert.strictEqual(value.key.startsWith('s3-'), true);
+            assert.strictEqual(key, value.key);
+            assert.strictEqual(value.lastmodified > 0, true);
+            assert.strictEqual(value.md5.length > 0, true);
+            assert.strictEqual(value.bytes > 0, true);
+            /** Deleted S3 attributes */
+            assert.strictEqual(value?.etag, undefined);
+            assert.strictEqual(value?.storageclass, undefined);
+            assert.strictEqual(value?.size, undefined);
+          }
+          done();
+        })
       })
     })
 
     describe('Source: SWIFT / Target: SWIFT', function() {
-      it.skip('should return the list of files from SWIFT/SWIFT (paginate automatically)', function(done) {
-        done();
+      
+      beforeEach(function (done) {
+        const nockAuthSwift = nock(urlAuthSwift)
+          .post('/auth/tokens')
+          .reply(200, connectionResultSuccessV3, { "X-Subject-Token": tokenAuthSwift });
+
+        const nockAuthSwiftSBG = nock(urlAuthSwift)
+          .post('/auth/tokens')
+          .reply(200, connectionResultSuccessV3SBG, { "X-Subject-Token": tokenAuthSwift });
+
+        helper.loadConfig('config.test-swift-swift.json', function(err, config) {
+          assert.strictEqual(err, null);
+          
+          const _config = config;          
+          storage.connection(_config, 'target', function(err) {
+            assert.strictEqual(err, undefined);
+            assert.strictEqual(nockAuthSwift.pendingMocks().length, 0);
+            storage.connection(_config, 'source', function(err) {
+              assert.strictEqual(err, undefined);
+              assert.strictEqual(nockAuthSwiftSBG.pendingMocks().length, 0);
+              done();
+            })
+          })
+        })
+      })
+
+      it('should return the list of files from SWIFT/SWIFT (paginate automatically)', function(done) {
+        
+        const nockListFilesSwift = nock(urlSwift)
+          .defaultReplyHeaders({ 'content-type': 'application/json' })
+          .get('/invoices')
+          .query({ 'limit' : '15' })
+          .reply(200, () => {
+            return fs.readFileSync(path.join(__dirname, 'assets', 'listFiles.swift.json'));
+          })
+          .get('/invoices')
+          .query({ 'limit' : '15', 'marker': 'swift-4-608cdb' })
+          .reply(200, () => {
+            return fs.readFileSync(path.join(__dirname, 'assets', 'listFiles.swift.paginate.json'));
+          })
+
+        const nockListFilesSwiftSBG = nock(urlSwiftSBG)
+          .defaultReplyHeaders({ 'content-type': 'application/json' })
+          .get('/invoices')
+          .query({ 'limit' : '15' })
+          .reply(200, () => {
+            return fs.readFileSync(path.join(__dirname, 'assets', 'listFiles.swift.paginate.json'));
+          })
+
+        storage.fetchListFiles(files, { swift: { queries: { limit: 15 } } }, function(err) {
+          assert.strictEqual(err, undefined);
+          assert.strictEqual(nockListFilesSwiftSBG.pendingMocks().length, 0);
+          assert.strictEqual(nockListFilesSwift.pendingMocks().length, 0);
+          assert.strictEqual(files.source.size, 8);
+          assert.strictEqual(files.target.size, 23);
+          assert.strictEqual(files.cache.size, 0);
+          for (const [key, value] of files.target) {
+            assert.strictEqual(value.key.startsWith('swift-'), true);
+            assert.strictEqual(key, value.key);
+            assert.strictEqual(value.lastmodified > 0, true);
+            assert.strictEqual(value.md5.length > 0, true);
+            assert.strictEqual(value.bytes > 0, true);
+            /** Deleted SWIFT attributes */
+            assert.strictEqual(value?.content_type, undefined);
+            assert.strictEqual(value?.last_modified, undefined);
+            assert.strictEqual(value?.hash, undefined);
+            assert.strictEqual(value?.name, undefined);
+          }
+          done();
+        });
       })
     })
 
@@ -568,6 +705,27 @@ let connectionResultSuccessV3 = {
             "region_id": "GRA",
             "url": urlSwift,
             "region": "GRA",
+            "interface": "admin",
+            "id": "1368e887740b4cd395191fccd32aebc5"
+          }
+        ],
+        "type": "object-store",
+        "id": "9afff7a684eb4830b08366fce2b94c57",
+        "name": "swift"
+      }
+    ]
+  }
+}
+
+let connectionResultSuccessV3SBG = {
+  "token": {
+    "catalog": [
+      {
+        "endpoints": [
+          {
+            "region_id": "SBG",
+            "url": urlSwiftSBG,
+            "region": "SBG",
             "interface": "admin",
             "id": "1368e887740b4cd395191fccd32aebc5"
           }
