@@ -21,6 +21,9 @@ helper.loadConfig('config.json', (err, config) => {
   if (!config?.delete) {
     config.delete = false;
   }
+  if (!config?.cacheFilename) {
+    config.cacheFilename = 'listFiles.cache.json';
+  }
   console.log(`🟢 Synchronisation: ${config.mode} ( Source:${config.source.name} ${config.mode === helper.MODES.BI ? "<=>" : "=>"} Destination:${config.target.name} )`);
   console.log(config.delete === true ? "🟢 Deletion: Enabled 🚧 Danger" : "⚪️ Deletion: Disabled");
   console.log("🟢 Cron Scheduled: " + config.cron);
@@ -59,7 +62,7 @@ helper.loadConfig('config.json', (err, config) => {
               return helper.stop(err);
             }
             /** Compute the logic of synchronisation */
-            const { objectsToDeleteTarget, objectsToUploadTarget, objectsToUploadSource, objectsToDeleteSource } = logic.computeSync(files, config.mode, config.delete, config?.logSync ?? true);
+            const { objectsToDeleteTarget, objectsToUploadTarget, objectsToUploadSource, objectsToDeleteSource } = logic.computeSync(files, config.mode, config?.delete, config?.logSync);
 
             if (objectsToDeleteTarget.length > 100 || objectsToDeleteSource.length > 100) {
               alreadyRunning = null;
