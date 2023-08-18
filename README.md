@@ -100,7 +100,7 @@ At the root of the project, copy the `config.default.json` and name it `config.j
 ```jsonc
 {
     "name"           : "s3",  /** Required by Sclone **/
-    "url"            : "s3.gra.first.cloud.test", /** S3 URL, without "https://" **/
+    "url"            : "s3.gra.first.cloud.test", /** S3 URL, without the bucket name, and without "https://" **/
     "accessKeyId"    : "",    /** Your access key ID **/
     "secretAccessKey": "",    /** Your secret key **/
     "region"         : "",    /** Bucket region **/
