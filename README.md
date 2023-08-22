@@ -14,13 +14,14 @@ Sclone, for "Storage Clone", is a node program to sync files and directories to 
 
 ## Benchmark
 
-> Environment: NodeJS 20 
+> Environment: VPS OVH - 2 vCores - 4GB Ram - Bandwidth 500Mbit/s - Debian 12 - Node 20 - Strasbourg (France)
+
 
 ### Test 1: S3 to S3
 
 Bidirectional sync between a source S3 to a target S3 (deletion: false).
 
-| | **5GB** objects from OVHCloud to OVHCloud | **100GB**  objects from OVHCloud to OVHCloud | **5GB**  objects from OVHCloud to Scaleway | **100GB**  objects from OVHCloud to Scaleway |
+| | **5GB** objects from OVHCloud to OVHCloud | **50GB**  objects from OVHCloud to OVHCloud | **5GB**  objects from OVHCloud to Scaleway | **50GB**  objects from OVHCloud to Scaleway |
 |-----------------------------|-------------------------------|--------------------------------|------------------------------|--------------------------------|
 | **sclone**                  |                               |                                |                              |                                |
 | **rclone**                  |                               |                                |                              |                                |

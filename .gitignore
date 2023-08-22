@@ -188,3 +188,4 @@ Temporary Items
 config.bisync.json
 config.json
 config-test*.json
+*GO

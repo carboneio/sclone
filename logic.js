@@ -3,6 +3,11 @@ const path = require('path');
 const helper = require('./helper');
 
 /**
+ * TODO:
+ * - [ ] Improve log deletion: `syncLogClean` function
+ */
+
+/**
  * @param {*} callback
  */
 function computeSync(files, mode, deletion, logSync) {

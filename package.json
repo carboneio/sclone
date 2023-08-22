@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "mocha ./tests",
-    "lint": "eslint --fix \"index.js\" \"tests/**/*.js\""
+    "lint": "eslint --fix \"index.js\" \"tests/**/*.js\"",
+    "bench": "node ./benchmarks/init.js"
   },
   "author": "",
   "license": "ISC",
@@ -14,6 +15,7 @@
     "tiny-storage-client": "=3.0.1"
   },
   "devDependencies": {
+    "lorem-ipsum": "=1.0.6",
     "eslint": "=8.46.0",
     "mocha": "=10.2.0",
     "nock": "=13.3.2"
