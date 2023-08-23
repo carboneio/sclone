@@ -27,7 +27,7 @@ function generateDataSet(quantity, callback) {
     }
   }
 
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < 100000000; i++) {
     const output = loremIpsum({ count: 1000000, units: "words" });
     total += getBytes(output);
     fs.writeFileSync(
