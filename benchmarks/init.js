@@ -5,7 +5,7 @@ const execQueue = require("../cqueue");
 const loremIpsum = require("lorem-ipsum");
 
 const getBytes = (string) => Buffer.byteLength(string, "utf8");
-const convertBytesToGB = (n) => n / 1024 / 1024 / 1024;
+const convertBytesToGB = (n) => n / 1000 / 1000 / 1000;
 
 const _config = JSON.parse(
   fs.readFileSync(path.join(__dirname, process?.env?.npm_config_config ?? "config.json"))

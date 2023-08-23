@@ -21,9 +21,9 @@ Sclone, for "Storage Clone", is a node program to sync files and directories to 
 
 Bidirectional sync between a source S3 to a target S3 (deletion: false).
 
-| | **1GB** objects from OVH GRA to OVH SBG | **50GB**  objects from OVHCloud to OVHCloud | **5GB**  objects from OVHCloud to Scaleway | **50GB**  objects from OVHCloud to Scaleway |
+| | **1GB** objects from OVH GRA to OVH SBG | **10GB**  objects from OVH GRA to OVH SBG | **5GB**  objects from OVHCloud to Scaleway | **50GB**  objects from OVHCloud to Scaleway |
 |-----------------------------|-------------------------------|--------------------------------|------------------------------|--------------------------------|
-| **sclone**                  |                               |                                |                              |                                |
+| **sclone**                  |   23.2 Sec                            |                                |                              |                                |
 | **rclone**                  |                               |                                |                              |                                |
 | **s3sync**                  |                               |                                |                              |                                |
 
