@@ -187,5 +187,5 @@ Temporary Items
 *.helper.js
 config.bisync.json
 config.json
-config-test*.json
+config-*.json
 *GO

@@ -9,19 +9,19 @@ Sclone, for "Storage Clone", is a node program to sync files and directories to 
 - **Job scheduler**: Use the Cron Syntax to start the process every minutes, every 30 minutes or anytime you want.
 - **Optional deletion**: by default deletion is disabled: missing files are added on the source/target bucket. When enabled, files are deleted on the source/target bucket.
 - **High performances**: files transfert is splited into multiple parrallel queues.
-- **Files cached**: at the end of the first process, the list of file is cached for better performances on the next execution.
+- **Files cached**: at the end of each process, the list of file is cached for better performances on the next execution.
 - **Optional integrity check**: MD5 hashes checked for file integrity. Disabled by default.
 
 ## Benchmark
 
-> Environment: VPS OVH - 2 vCores - 4GB Ram - Bandwidth 500Mbit/s - Debian 12 - Node 20 - Strasbourg (France)
+> Environment: VPS OVH - 2 vCores - 4GB Ram - Bandwidth 500Mbit/s - Debian 12 - Node 20.5.1 - Strasbourg (France)
 
 
 ### Test 1: S3 to S3
 
 Bidirectional sync between a source S3 to a target S3 (deletion: false).
 
-| | **5GB** objects from OVHCloud to OVHCloud | **50GB**  objects from OVHCloud to OVHCloud | **5GB**  objects from OVHCloud to Scaleway | **50GB**  objects from OVHCloud to Scaleway |
+| | **1GB** objects from OVH GRA to OVH SBG | **50GB**  objects from OVHCloud to OVHCloud | **5GB**  objects from OVHCloud to Scaleway | **50GB**  objects from OVHCloud to Scaleway |
 |-----------------------------|-------------------------------|--------------------------------|------------------------------|--------------------------------|
 | **sclone**                  |                               |                                |                              |                                |
 | **rclone**                  |                               |                                |                              |                                |

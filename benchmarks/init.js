@@ -8,7 +8,7 @@ const getBytes = (string) => Buffer.byteLength(string, "utf8");
 const convertBytesToGB = (n) => n / 1024 / 1024 / 1024;
 
 const _config = JSON.parse(
-  fs.readFileSync(path.join(__dirname, "config.json"))
+  fs.readFileSync(path.join(__dirname, process?.env?.npm_config_config ?? "config.json"))
 );
 const s3 = clientStorage(_config);
 s3.setTimeout(60000);
@@ -35,7 +35,7 @@ function generateDataSet(quantity, callback) {
       Buffer.from(output)
     );
     console.log(convertBytesToGB(total));
-    if (convertBytesToGB(total) >= 1) {
+    if (convertBytesToGB(total) >= quantity) {
       console.log(`${quantity}GO Generated!`);
       callback()
       break;
@@ -44,6 +44,7 @@ function generateDataSet(quantity, callback) {
 }
 
 function cleanBucket(bucketName, callback) {
+  
   s3.listFiles(bucketName, (err, resp) => {
     if (err) {
       return callback(err.toString());
@@ -143,3 +144,9 @@ if (mode === "generate") {
 } else {
     console.log("Missing mode option, add the to command: --mode=value. The value can be: generate or clean");
 }
+
+/**
+ * COMMANDS:
+ * - npm run bench --mode=clean --bucket=name
+ * - npm run bench --mode=generate --size=1 --bucket=templates
+ */
