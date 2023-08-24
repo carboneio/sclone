@@ -243,7 +243,7 @@ function syncFiles (filesToUploadTarget, filesToDeleteTarget, filesToUploadSourc
       } catch(err) {
         return next('syncFiles | delete-files-target | Error catched: ' + err.toString());
       }
-    }, { concurrency: 20, delay: 0, retry: 0, logQueueStatus: logQueueStatus }, function(err) {
+    }, { concurrency: 15, delay: 0, retry: 0, logQueueStatus: logQueueStatus }, function(err) {
       if (err) {
         console.log("Error on deleting target files |" + err.toString());
       }
@@ -265,7 +265,7 @@ function syncFiles (filesToUploadTarget, filesToDeleteTarget, filesToUploadSourc
             return next('syncFiles | upload-from-source-to-target error catched: ' + err.toString());
           }
         },
-        { concurrency: 20, delay: 0, retry: 1, logQueueStatus: logQueueStatus },
+        { concurrency: 15, delay: 0, retry: 1, logQueueStatus: logQueueStatus },
         function(err) {
           if (err) {
             console.log("Error on uploading S3 files |" + err.toString());
@@ -294,7 +294,7 @@ function syncFiles (filesToUploadTarget, filesToDeleteTarget, filesToUploadSourc
               return next('syncFiles | upload-from-target-to-source | error catched: ' + err.toString());
             }
           },
-          { concurrency: 20, delay: 0, retry: 1, logQueueStatus: logQueueStatus },
+          { concurrency: 15, delay: 0, retry: 1, logQueueStatus: logQueueStatus },
           function(err) {
             if (err) {
               console.log("Error on uploading to source files |" + err.toString());
@@ -317,7 +317,7 @@ function syncFiles (filesToUploadTarget, filesToDeleteTarget, filesToUploadSourc
                 return next('syncFiles | delete-files-source | error catched: ' + err.toString());
               }
             },
-            { concurrency: 20, delay: 0, retry: 1, logQueueStatus: logQueueStatus },
+            { concurrency: 15, delay: 0, retry: 1, logQueueStatus: logQueueStatus },
             function(err) {
               if (err) {
                 console.log("Error on deleting source files |" + err.toString());

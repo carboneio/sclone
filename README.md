@@ -11,7 +11,7 @@ Sclone, for "Storage Clone", is a node program to sync files and directories to 
 - **High performances**: In a first stage, file listing is load into memory, then files transfert is splited into parrallel queues.
 - **Files cached**: at the end of each process, the list of file is cached for better performances on the next execution.
 - **Optional integrity check**: MD5 hashes checked for file integrity. Disabled by default.
-- **Metadata kept**: from s3 to swift or swift to s3, metadata are kept.
+- **Metadata preserved**: from s3 to swift or swift to s3, metadatas are preserved/converted automatically.
 
 ## Benchmark
 
@@ -22,10 +22,11 @@ Unidirectional sync between a source storage to a target storage at different re
 > * OVH S3: normal (and not performance)
 > * Default options for sclone and rclone
 
-| | **10GB** from OVH GRA to OVH SBG | **10GB** from OVH GRA to Scaleway Paris | 
-|-----------------------------|-------------------------------|--------------------------------|
-| **sclone**  | 3.3 Min  |  4.10 Min   |
-| **rclone**  | 5.45 Min |  10.51 Min  |
+| | **10GB** from S3 OVH Gra to S3 OVH Sbg | **10GB** from S3 OVH Gra to S3 Scaleway Paris | **10GB** from S3 OVH Gra to SWIFT OVH Gra |
+|-----------------------------|-------------------------------|-------------------------------|--------------------------------|
+| **sclone**  | 3.3 Min  |  4.10 Min   | 3.27 Min  |
+| **rclone**  | 5.45 Min |  10.51 Min  |  |
+| **s3sync**  | 3.10 Min |   4.09 Min   | ❌ |
 
 
 
