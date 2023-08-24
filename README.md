@@ -8,33 +8,26 @@ Sclone, for "Storage Clone", is a node program to sync files and directories to 
 - **Bidirectional mode**: mode to make the source and target buckets identicals.
 - **Job scheduler**: Use the Cron Syntax to start the process every minutes, every 30 minutes or anytime you want.
 - **Optional deletion**: by default deletion is disabled: missing files are added on the source/target bucket. When enabled, files are deleted on the source/target bucket.
-- **High performances**: files transfert is splited into multiple parrallel queues.
+- **High performances**: In a first stage, file listing is load into memory, then files transfert is splited into parrallel queues.
 - **Files cached**: at the end of each process, the list of file is cached for better performances on the next execution.
 - **Optional integrity check**: MD5 hashes checked for file integrity. Disabled by default.
+- **Metadata kept**: from s3 to swift or swift to s3, metadata are kept.
 
 ## Benchmark
 
-> Environment: VPS OVH - 2 vCores - 4GB Ram - Bandwidth 500Mbit/s - Debian 12 - Node 20.5.1 - Strasbourg (France)
+Unidirectional sync between a source storage to a target storage at different regions (deletion: false).
+
+> * Environment: VPS OVH - 2 vCores - 4GB Ram - Bandwidth 500Mbit/s - Debian 12 - Node 20.5.1 - Strasbourg (France)
+> * The same 10GB dataset was used for each synchronisation
+> * OVH S3: normal (and not performance)
+> * Default options for sclone and rclone
+
+| | **10GB** from OVH GRA to OVH SBG | **10GB** from OVH GRA to Scaleway Paris | 
+|-----------------------------|-------------------------------|--------------------------------|
+| **sclone**  | 3.3 Min  |  4.10 Min   |
+| **rclone**  | 5.45 Min |  10.51 Min  |
 
 
-### Test 1: S3 to S3
-
-Bidirectional sync between a source S3 to a target S3 (deletion: false).
-
-| | **1GB** objects from OVH GRA to OVH SBG | **10GB**  objects from OVH GRA to OVH SBG | **5GB**  objects from OVHCloud to Scaleway | **50GB**  objects from OVHCloud to Scaleway |
-|-----------------------------|-------------------------------|--------------------------------|------------------------------|--------------------------------|
-| **sclone**                  |   23.2 Sec                            |                                |                              |                                |
-| **rclone**                  |                               |                                |                              |                                |
-| **s3sync**                  |                               |                                |                              |                                |
-
-### Test 2: SWIFT to S3
-
-Bidirectional sync between a source SWIFT storage to a target S3 (deletion: false).
-
-| | **5GB**  OVHCloud to OVHCloud | **100GB** OVHCloud to OVHCloud | **5GB** OVHCloud to Scaleway | **100GB** OVHCloud to Scaleway |
-|---|---|---|---|---|
-| **sclone** |  |  |  |  |
-| **rclone** |  |  |  |  |
 
 ## Configuration
 
