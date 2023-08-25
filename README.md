@@ -1,6 +1,6 @@
 # sclone
 
-Sclone, for "Storage Clone", is a node program to sync files and directories to and from different cloud storage providers supporting S3 or/and Open Stack SWIFT.
+Sclone, for "Storage Clone", is a node program to sync files to and from different cloud storage providers supporting S3 or/and Open Stack SWIFT.
 
 ## Features
 
@@ -12,23 +12,28 @@ Sclone, for "Storage Clone", is a node program to sync files and directories to 
 - **Files cached**: at the end of each process, the list of file is cached for better performances on the next execution.
 - **Optional integrity check**: MD5 hashes checked for file integrity. Disabled by default.
 - **Metadata preserved**: from s3 to swift or swift to s3, metadatas are preserved/converted automatically.
+- **Production ready**: Battle tested with Terabytes of buckets
 
 ## Benchmark
 
-Unidirectional sync between a source storage to a target storage at different regions (deletion: false).
-
 > * Environment: VPS OVH - 2 vCores - 4GB Ram - Bandwidth 500Mbit/s - Debian 12 - Node 20.5.1 - Strasbourg (France)
-> * The same 10GB dataset was used for each synchronisation
-> * OVH S3: normal (and not performance)
-> * Default options for sclone and rclone
+> * OVH S3 bucket type: normal (and not performance)
+> * Default options were used for sclone / rclone / s3sync
+
+Unidirectional sync between a source storage to a target storage located at different region. Every synchronization used the identical 10 GB dataset of 1624 files.
 
 | | **10GB** from S3 OVH Gra to S3 OVH Sbg | **10GB** from S3 OVH Gra to S3 Scaleway Paris | **10GB** from S3 OVH Gra to SWIFT OVH Gra |
 |-----------------------------|-------------------------------|-------------------------------|--------------------------------|
-| **sclone**  | 3.3 Min  |  4.10 Min   | 3.27 Min  |
-| **rclone**  | 5.45 Min |  10.51 Min  |  |
+| **sclone**  | 3.30 Min  |  4.10 Min   | 3.27 Min  |
+| **rclone**  | 5.45 Min |  10.51 Min  | 6.32 Min |
 | **s3sync**  | 3.10 Min |   4.09 Min   | ❌ |
 
+Bidirectional sync between two storages located at different region. Every synchronization used two data-set of 5GB with common files, new and edited files.
 
+| | **10GB** from S3 OVH Gra to S3 OVH Sbg | **10GB** from S3 OVH Gra to S3 Scaleway Paris | **10GB** from S3 OVH Gra to SWIFT OVH Gra |
+|-----------------------------|-------------------------------|-------------------------------|--------------------------------|
+| **sclone**  | |  | |
+| **rclone**  | |  | |
 
 ## Configuration
 
@@ -38,14 +43,18 @@ At the root of the project, copy the `config.default.json` and name it `config.j
 
 | Options | Default value  | Description |
 |---|---|---|
-| **source** | | Storage credentials ([S3 Example](#example-of-s3-credentials) / [SWIFT example](#example-of-openstack-swift-credentials)) |
-| **target** | | Storage credentials ([S3 Example](#example-of-s3-credentials) / [SWIFT example](#example-of-openstack-swift-credentials)) |
-| **mode** |  | Synchronisation mode:<br> ⏺ `unidirectional`: One way synchronization from source to destination without modifying any of the source files and deleting any of the destination files (unless `delete` option is enabled).<br> ⏺ `bidirectional`: Two way synchronisation between a source and target storage, without deleting any of the files (unless `delete` option is enabled). |
-| **cron** |  | Define the period of the program execution, and must follow the CRON syntax, for instance every minutes: `"*/1 * * * *"`. New process are not started until the current synchronisation is not finised. |
-| **delete** | `false` | When file deletion is enabled with `true`, according to the synchronization mode |
+| **source** | | **Option required**<br> Storage credentials ([S3 Example](#example-of-s3-credentials) / [SWIFT example](#example-of-openstack-swift-credentials)) |
+| **target** | | **Option required**<br>Storage credentials ([S3 Example](#example-of-s3-credentials) / [SWIFT example](#example-of-openstack-swift-credentials)) |
+| **mode** |  | **Option required**<br>Synchronisation mode:<br> ⏺ `unidirectional`: One way synchronization from source to destination without modifying any of the source files and deleting any of the destination files (unless `delete` option is enabled).<br> ⏺ `bidirectional`: Two way synchronisation between a source and target storage, without deleting any of the files (unless `delete` option is enabled). |
+| **cron** |  | Define the period of the program execution, and must follow the CRON syntax, for instance every minutes: `"*/1 * * * *"`. New process are not started until the current synchronisation is not finised. If the option is not defined, the synchronisation is executed immediately. |
+| **delete** | `false` | If `true`, files are deleted according to the synchronization mode logic. |
 | **integrityCheck** | `false` | If `true`, MD5 hashes are checked for file integrity. |
-| **logSync** | `false` | If `true`, at the end of each synchronisation, a JSON file is created including all file operations |
+| **logSync** | `false` | If `true`, at the end of each synchronisation, a JSON file is created including all file operations. |
 | **cacheFilename** | `"listFiles.cache.json"` | File name of the cache, it is keeping the list of files synchronised during `bidirectional` mode only. The JSON file is created automatically at the root of the repository. |
+| **transfers** | `15` | Number of file operation to run in parallel: upload/deletion. If a storage responds many errors (status 500, socket or authentication error), consider reducing the number of transfers. |
+| **retry** | `1` | Max numbers of retries to sync file. |
+| **dryRun** | `false` | Do a trial run with no permanent changes, a JSON file is created including all file operations. |
+| **maxDeletion** |  | Max number of deletion allowed during a file synchronisation. If the threshold is crossed, the process is terminated. It is a security measure to avoid propagation of unexpected bulk deletions. |
 
 
 

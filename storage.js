@@ -167,7 +167,7 @@ const downloadFile = {
       if (resp?.statusCode !== 200) {
         return callback(`S3 downloadFile Code ${resp?.statusCode} | ${ resp?.body?.error?.code ?? resp?.body?.toString()}`);
       }
-      if (integrityCheck === true && resp?.headers?.["etag"]) {
+      if (integrityCheck === true) {
         const _fileMD5 = getMD5(resp?.body, "hex")
         /** S3 Check file integrity if "etag" exists */
         if (resp?.headers?.["etag"] && "\""+_fileMD5+"\"" !== resp?.headers?.["etag"]) {
@@ -185,7 +185,7 @@ const downloadFile = {
         return callback("Swift downloadFile Error | " + err.toString());
       }
       /** SWIFT integrity check */
-      if (integrityCheck === true && resp?.headers?.etag) {
+      if (integrityCheck === true) {
         const _fileMD5 = getMD5(resp.body, 'hex');
         if (_fileMD5 !== resp.headers.etag) {
           return callback(`Swift downloadFile Error | Integrity check error: file md5 is not valid`);
