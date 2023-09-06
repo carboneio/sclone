@@ -125,27 +125,29 @@ function setupBisyncDataset(dataSetName, callback) {
       }
     );
   }
-  for (let i = 0; i < targetUpdated.length; i++) {
-    console.log(
-      "Updated:",
-      path.join(__dirname, `targetDataset`, targetUpdated[i])
-    );
+  execQueue('edit-target-dataset', targetUpdated, function(filename, next) {
     fs.readFile(
-      path.join(__dirname, `targetDataset`, targetUpdated[i]),
-      function (err, data) {
-        if (err) throw err;
-        data += buf;
-        fs.writeFile(
-          path.join(__dirname, `targetDataset`, targetUpdated[i]),
-          data,
-          function (err) {
-            if (err) throw err;
-          }
-        );
-      }
-    );
-  }
-  return callback();
+        path.join(__dirname, `targetDataset`, filename),
+        function (err, data) {
+          if (err) return next(err);
+          data += buf;
+          fs.writeFile(
+            path.join(__dirname, `targetDataset`, filename),
+            data,
+            function (err) {
+                if (err) return next(err);
+                return next();
+            }
+          );
+        }
+    )
+  }, { concurrency: 5 },
+  function(err) {
+    if (err) {
+        console.log("Something went wrong " + err.toString());
+    }
+    return callback();
+  })
 }
 
 function uploadDataSet(bucketName, dataSetName) {
