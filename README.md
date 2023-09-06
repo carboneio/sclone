@@ -32,8 +32,8 @@ Bidirectional sync between two storages located at different region. Every synch
 
 | | **10GB** from S3 OVH Gra to S3 OVH Sbg | **10GB** from S3 OVH Gra to S3 Scaleway Paris | **10GB** from S3 OVH Gra to SWIFT OVH Gra |
 |-----------------------------|-------------------------------|-------------------------------|--------------------------------|
-| **sclone**  | 4.06 Min |  | |
-| **rclone**  | |  | |
+| **sclone**  | 3.59 Min | 4.11 Min | 3.42 Min |
+| **rclone**  | 8.4 Min |  | |
 
 ## Configuration
 
