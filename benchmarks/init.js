@@ -108,23 +108,18 @@ function setupBisyncDataset(dataSetName, callback) {
   }
   console.log(files.length, source.length, target.length, targetUpdated.length);
   for (let i = 0; i < target.length; i++) {
-    fs.copyFile(
+    fs.copyFileSync(
       path.join(__dirname, `${dataSetName}GO`, target[i]),
-      path.join(__dirname, `targetDataset`, target[i]),
-      function (err) {
-        if (err) throw err;
-      }
+      path.join(__dirname, `targetDataset`, target[i])
     );
   }
   for (let i = 0; i < source.length; i++) {
-    fs.copyFile(
+    fs.copyFileSync(
       path.join(__dirname, `${dataSetName}GO`, source[i]),
-      path.join(__dirname, `sourceDataset`, source[i]),
-      function (err) {
-        if (err) throw err;
-      }
+      path.join(__dirname, `sourceDataset`, source[i])
     );
   }
+  console.log("🟢 Copy done")
   execQueue('edit-target-dataset', targetUpdated, function(filename, next) {
     fs.readFile(
         path.join(__dirname, `targetDataset`, filename),
