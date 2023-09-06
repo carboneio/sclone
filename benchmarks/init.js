@@ -293,7 +293,7 @@ if (mode === "generate") {
           console.log("Head bucket error: " + err.toString());
           process.exit();
         }
-        if (resp.statusCode !== 200) {
+        if (resp.statusCode >= 300) {
           console.log("Head bucket status error: " + resp.statusCode);
           process.exit();
         }
@@ -303,7 +303,7 @@ if (mode === "generate") {
               console.log("Head bucket error: " + err.toString());
               process.exit();
             }
-            if (resp.statusCode !== 200) {
+            if (resp.statusCode >= 300) {
               console.log("Head bucket status error: " + resp.statusCode);
               process.exit();
             }
