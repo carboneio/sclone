@@ -19,6 +19,14 @@ storageSource.setTimeout(60000);
 
 const storageTarget = clientStorage(_config.target);
 storageTarget.setTimeout(60000);
+if (_config.target.name === 'swift') {
+    storageTarget.connection(function(err) {
+        if (err) {
+            console.log("Connection error: " + err.toString());
+            process.exit();
+        }
+    })
+}
 
 function generateDataSet(quantity, callback) {
   let total = 0;
@@ -273,6 +281,7 @@ if (mode === "generate") {
     uploadDataSet(bucketName, size);
   });
 } else if (mode === "uploadbi") {
+
     storageSource.headBucket(_config.source.bucket, (err, resp) => {
         if (err) {
           console.log("Head bucket error: " + err.toString());
@@ -332,4 +341,5 @@ if (mode === "generate") {
  * - npm run bench --mode=clean --bucket=name
  * - npm run bench --mode=generate --size=1
  * - npm run bench --mode=generatebi --size=1
+ * - npm run bench --mode=uploadbi
  */
