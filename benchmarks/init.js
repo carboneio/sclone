@@ -19,12 +19,18 @@ storageSource.setTimeout(60000);
 
 const storageTarget = clientStorage(_config.target);
 storageTarget.setTimeout(60000);
-if (_config.target.name === 'swift') {
-    storageTarget.connection(function(err) {
-        if (err) {
-            console.log("Connection error: " + err.toString());
-            process.exit();
+
+function connection(storage, name) {
+    return new Promise((resolve, reject) => {
+        if (name === 'swift') {
+            return storageTarget.connection(function(err) {
+                if (err) {
+                    return reject("Connection error: " + err.toString())
+                }
+                return resolve();
+            })
         }
+        return resolve();
     })
 }
 
@@ -282,7 +288,7 @@ if (mode === "generate") {
   });
 } else if (mode === "uploadbi") {
 
-    storageSource.headBucket(_config.source.bucket, (err, resp) => {
+    storageSource.headBucket(_config.source.bucket, async (err, resp) => {
         if (err) {
           console.log("Head bucket error: " + err.toString());
           process.exit();
@@ -291,6 +297,7 @@ if (mode === "generate") {
           console.log("Head bucket status error: " + resp.statusCode);
           process.exit();
         }
+        await connection(storageTarget, _config.target.name);
         storageTarget.headBucket(_config.target.bucket, (err, resp) => {
             if (err) {
               console.log("Head bucket error: " + err.toString());
