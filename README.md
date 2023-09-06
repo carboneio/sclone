@@ -13,6 +13,8 @@ Sclone, for "Storage Clone", is a node program to sync files to and from differe
 - **Optional integrity check**: MD5 hashes checked for file integrity. Disabled by default.
 - **Metadata preserved**: from s3 to swift or swift to s3, metadatas are preserved/converted automatically.
 - **Production ready**: Battle tested with Terabytes of buckets
+- **Dry run**: Output what operations will be performed without actually carrying out those operations.
+- **Support any S3 and SWIFT provider**:  AWS S3, OVHCloud, Scaleway, Ceph.io,  DigitalOcean Spaces, Cloudflare R2, Seagate Lyve Cloud, Tencent Cloud, Alibaba Cloud OSS, IBM COS S3, Dreamhost S3, GCS, IDrive e2, Synology C2, IONOS Cloud, Minio, Petabox, and more...
 
 ## Benchmark
 
@@ -34,6 +36,27 @@ Bidirectional sync between two storages located at different region. Every synch
 |-----------------------------|-------------------------------|-------------------------------|--------------------------------|
 | **sclone**  | 3.59 Min | 4.11 Min | 3.42 Min |
 | **rclone**  | 8.4 Min | 13.57 Min | 10.40 Min |
+
+## Quickstart
+
+First, clone the project
+```sh
+git clone git@github.com:carboneio/sclone.git
+```
+Open the sclone directory
+```sh
+cd sclone
+```
+Copy the default configuration and name it `config.json`
+```sh
+cp config.default.json config.json
+```
+Edit the `config.json` by setting the `mode`, `source` and `target` storage crendentials. Read the [configuration](#configuration) section for details.
+Finally start the synchronisation:
+```sh
+node index.js
+```
+Set the option `"dryRun":true` on the `config.json`, it will output what operations will be performed without actually carrying out those operations.
 
 ## Configuration
 
@@ -122,3 +145,9 @@ For the first synchronisation, even if the `deletion` option is enabled, it won'
 
 For all other synchronisation, Sclone will use the cache as the source of truth of the previous synchronisation to determine new, edited, or deleted files. If the cache is deleted, it will be considered a first synchronisation; it won't delete anything and will create a new cache.
 
+
+## Roadmap
+
+- Enable local <> S3/Swift sync
+- Create a ready to use binary / container
+- 👉 Create an issue to suggest ideas

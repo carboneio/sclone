@@ -9,7 +9,7 @@
     "bench": "node ./benchmarks/init.js"
   },
   "author": "",
-  "license": "ISC",
+  "license": "Apache-2.0",
   "dependencies": {
     "node-cron": "=3.0.2",
     "tiny-storage-client": "=3.0.1"

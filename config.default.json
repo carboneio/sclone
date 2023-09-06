@@ -1,10 +1,5 @@
 {
   "mode": "bidirectional",
-  "delete": false,
-  "logSync": false,
-  "cacheFilename": "listFiles.cache.json",
-  "cron": "*/5 * * * *",
-  "integrityCheck": false,
   "source": {
     "name"      : "swift",
     "authUrl"   : "https://auth.cloud.ovh.net/v3",
