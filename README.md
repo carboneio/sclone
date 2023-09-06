@@ -17,8 +17,8 @@ Sclone, for "Storage Clone", is a node program to sync files to and from differe
 ## Benchmark
 
 > * Environment: VPS OVH - 2 vCores - 4GB Ram - Bandwidth 500Mbit/s - Debian 12 - Node 20.5.1 - Strasbourg (France)
-> * OVH S3 bucket type: normal (and not performance)
 > * Default options were used for sclone / rclone / s3sync
+> * OVH S3 bucket type: normal (and not performance)
 
 Unidirectional sync between a source storage to a target storage located at different region. Every synchronization used the identical 10 GB dataset of 1624 files.
 
@@ -28,11 +28,11 @@ Unidirectional sync between a source storage to a target storage located at diff
 | **rclone**  | 5.45 Min |  10.51 Min  | 6.32 Min |
 | **s3sync**  | 3.10 Min |   4.09 Min   | ❌ |
 
-Bidirectional sync between two storages located at different region. Every synchronization used two data-set of 5GB with common files, new and edited files.
+Bidirectional sync between two storages located at different region. Every synchronization used the same two data-set of 8GB (1354 files) with 1/3 common files, 1/3 new files and 1/3 edited files.
 
 | | **10GB** from S3 OVH Gra to S3 OVH Sbg | **10GB** from S3 OVH Gra to S3 Scaleway Paris | **10GB** from S3 OVH Gra to SWIFT OVH Gra |
 |-----------------------------|-------------------------------|-------------------------------|--------------------------------|
-| **sclone**  | |  | |
+| **sclone**  | 4.06 Min |  | |
 | **rclone**  | |  | |
 
 ## Configuration

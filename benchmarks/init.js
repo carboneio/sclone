@@ -296,12 +296,17 @@ if (mode === "generate") {
         })
     })
 } else if (mode === "clean") {
+    const storageName = process?.env?.npm_config_storage;
   if (!bucketName) {
     console.log("Missing bucket name, pass the option --bucket=name");
     process.exit();
   }
-  console.log("🟢 Clean storage", bucketName === _config.source.bucket ? 'source' : 'target');
-  cleanBucket(bucketName === _config.source.bucket ? storageSource : storageTarget, bucketName, (err) => {
+  if (!storageName) {
+    console.log("Missing bucket name, pass the option --storage=[target/source]");
+    process.exit();
+  }
+  console.log("🟢 Clean storage", storageName);
+  cleanBucket(storageName === 'source' ? storageSource : storageTarget, bucketName, (err) => {
     if (err) {
       console.log("Something went wrong:" + err.toString());
       process.exit();
