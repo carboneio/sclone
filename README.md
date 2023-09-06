@@ -1,6 +1,6 @@
 # sclone
 
-Sclone, for "Storage Clone", is a node program to sync files to and from different cloud storage providers supporting S3 or/and Open Stack SWIFT.
+Sclone, for "Storage Clone", is a node program to sync files to and from different cloud storage providers supporting S3 and Open Stack SWIFT.
 
 ## Features
 
@@ -30,10 +30,10 @@ Unidirectional sync between a source storage to a target storage located at diff
 
 Bidirectional sync between two storages located at different region. Every synchronization used the same two data-set of 8GB (1354 files) with 1/3 common files, 1/3 new files and 1/3 edited files.
 
-| | **10GB** from S3 OVH Gra to S3 OVH Sbg | **10GB** from S3 OVH Gra to S3 Scaleway Paris | **10GB** from S3 OVH Gra to SWIFT OVH Gra |
+| | **8GB** S3 OVH Gra <> **8GB** S3 OVH Sbg | **8GB** S3 OVH Gra <> **8GB** S3 Scaleway Paris | **8GB** from S3 OVH Gra <> **8GB** SWIFT OVH Gra |
 |-----------------------------|-------------------------------|-------------------------------|--------------------------------|
 | **sclone**  | 3.59 Min | 4.11 Min | 3.42 Min |
-| **rclone**  | 8.4 Min |  | |
+| **rclone**  | 8.4 Min | 13.57 Min | 10.40 Min |
 
 ## Configuration
 
@@ -111,3 +111,14 @@ At the root of the project, copy the `config.default.json` and name it `config.j
     "bucket"         : ""     /** Bucket name that will be synchronised **/
 }
 ```
+
+## Synchronisation Strategy
+
+### Bidirectional 
+
+Sclone compares files' both md5 and modification times. If the md5 is different, only the newest file is kept.
+
+For the first synchronisation, even if the `deletion` option is enabled, it won't delete anything. It will make sure the source and target are synchronised. If a file does not exist on one storage, it will be pushed into the other storage, and vice-versa. Finally, a cache of the list of synchronised files is created (named `listFiles.cache.json` by default).
+
+For all other synchronisation, Sclone will use the cache as the source of truth of the previous synchronisation to determine new, edited, or deleted files. If the cache is deleted, it will be considered a first synchronisation; it won't delete anything and will create a new cache.
+
