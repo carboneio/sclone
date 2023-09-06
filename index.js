@@ -106,7 +106,7 @@ function sclone(config, callback) {
         return callback(new Error(`Too many element deleted | target: ${objectsToDeleteTarget.length} / source ${objectsToDeleteSource.length} | Process stopped!`))
       }
       /** Synchronise storages based on lists returned by "computeSync" */
-      storage.syncFiles(objectsToUploadTarget, objectsToDeleteTarget, objectsToUploadSource, objectsToDeleteSource, config.mode, function(err) {
+      storage.syncFiles(objectsToUploadTarget, objectsToDeleteTarget, objectsToUploadSource, objectsToDeleteSource, config, function(err) {
         if (err) {
           return callback(err)
         }

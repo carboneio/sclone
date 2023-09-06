@@ -189,3 +189,5 @@ config.bisync.json
 config.json
 config-*.json
 *GO
+sourceDataset
+targetDataset

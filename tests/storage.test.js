@@ -5,6 +5,11 @@ const path = require('path')
 const fs = require('fs')
 const helper = require('../helper');
 
+/**
+ * TODO:
+ * - test option `maxDeletion`
+ */
+
 const files = {
   target        : new Map(),
   source        : new Map(),
@@ -74,7 +79,7 @@ describe("storage", function() {
         { 'key': 'file3.txt' },
         { 'key': 'file4.txt' }
       ]
-      storage.syncFiles([], _filestoDeleteTarget, [], [], helper.MODES.BI, function(err) {
+      storage.syncFiles([], _filestoDeleteTarget, [], [], { mode: helper.MODES.BI }, function(err) {
         assert.strictEqual(err, undefined);
         assert.strictEqual(nockBulkDeleteS3.pendingMocks().length, 0);
         done();
@@ -107,7 +112,7 @@ describe("storage", function() {
       for (let i = 0; i < 2000; i++) {
         _filestoDeleteS3.push({ key: `files${i}.txt` })
       }
-      storage.syncFiles([], _filestoDeleteS3, [], [], helper.MODES.BI, function(err) {
+      storage.syncFiles([], _filestoDeleteS3, [], [], { mode: helper.MODES.BI }, function(err) {
         assert.strictEqual(err, undefined);
         assert.strictEqual(nockBulkDeleteS3.pendingMocks().length, 0);
         done();
@@ -156,7 +161,7 @@ describe("storage", function() {
 
       _filesToUploadS3.push({ key: `1!file.txt` })
 
-      storage.syncFiles(_filesToUploadS3, [], [], [], helper.MODES.BI, function(err) {
+      storage.syncFiles(_filesToUploadS3, [], [], [], { mode: helper.MODES.BI }, function(err) {
         assert.strictEqual(err, undefined);
         assert.strictEqual(nockS3Upload.pendingMocks().length, 0);
         assert.strictEqual(nockSwiftDownload.pendingMocks().length, 0);
@@ -196,7 +201,7 @@ describe("storage", function() {
 
       _filesToUploadSwift.push({ key: `1-file.txt` })
 
-      storage.syncFiles([], [], _filesToUploadSwift, [], helper.MODES.BI, function(err) {
+      storage.syncFiles([], [], _filesToUploadSwift, [], { mode: helper.MODES.BI }, function(err) {
         assert.strictEqual(err, undefined);
         assert.strictEqual(nockS3Download.pendingMocks().length, 0);
         assert.strictEqual(nockSwiftUpload.pendingMocks().length, 0);

@@ -1,7 +1,16 @@
 {
-    "accessKeyId"    : "",
-    "secretAccessKey": "",
-    "url"            : "",
-    "region"         : "",
-    "bucket"         : ""
+    "target": {
+        "accessKeyId"    : "",
+        "secretAccessKey": "",
+        "url"            : "",
+        "region"         : "",
+        "bucket"         : ""
+    },
+    "source": {
+        "accessKeyId"    : "",
+        "secretAccessKey": "",
+        "url"            : "",
+        "region"         : "",
+        "bucket"         : ""
+    }
 }
