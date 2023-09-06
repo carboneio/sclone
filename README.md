@@ -39,6 +39,8 @@ Bidirectional sync between two storages located at different region. Every synch
 
 ## Quickstart
 
+> Required: Node 16 must be installed on your laptop/server.
+
 First, clone the project
 ```sh
 git clone git@github.com:carboneio/sclone.git
