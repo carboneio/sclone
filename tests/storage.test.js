@@ -7,7 +7,8 @@ const helper = require('../helper');
 
 /**
  * TODO:
- * - test option `maxDeletion`
+ * - [ ] test deleting source files with `syncFiles`
+ * - [ ] test `maxDeletion` options
  */
 
 const files = {
@@ -40,7 +41,7 @@ describe("storage", function() {
         return "<?xml version=\"1.0\" encoding=\"UTF-8\"?><ListAllMyBucketsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Owner><ID>89123456:user-feiowjfOEIJW</ID><DisplayName>12345678:user-feiowjfOEIJW</DisplayName></Owner><Buckets><Bucket><Name>invoices</Name><CreationDate>2023-02-27T11:46:24.000Z</CreationDate></Bucket></Buckets></ListAllMyBucketsResult>";
       });
 
-    helper.loadConfig('config.test-swift-s3.json', function(err, config) {
+    helper.loadConfig(path.join(__dirname, 'config.test-swift-s3.json'), function(err, config) {
       assert.strictEqual(err, null);
       _config = config;
       storage.connection(_config, 'source', function(err) {
@@ -229,7 +230,7 @@ describe("storage", function() {
             return "<?xml version=\"1.0\" encoding=\"UTF-8\"?><ListAllMyBucketsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Owner><ID>89123456:user-feiowjfOEIJW</ID><DisplayName>12345678:user-feiowjfOEIJW</DisplayName></Owner><Buckets><Bucket><Name>invoices</Name><CreationDate>2023-02-27T11:46:24.000Z</CreationDate></Bucket></Buckets></ListAllMyBucketsResult>";
           });
 
-        helper.loadConfig('config.test-s3-s3.json', function(err, config) {
+        helper.loadConfig(path.join(__dirname, 'config.test-s3-s3.json'), function(err, config) {
           assert.strictEqual(err, null);
           _config = config;
           storage.connection(_config, 'source', function(err) {
@@ -301,7 +302,7 @@ describe("storage", function() {
           .post('/auth/tokens')
           .reply(200, connectionResultSuccessV3SBG, { "X-Subject-Token": tokenAuthSwift });
 
-        helper.loadConfig('config.test-swift-swift.json', function(err, config) {
+        helper.loadConfig(path.join(__dirname, 'config.test-swift-swift.json'), function(err, config) {
           assert.strictEqual(err, null);
           
           const _config = config;          
@@ -377,7 +378,7 @@ describe("storage", function() {
             return "<?xml version=\"1.0\" encoding=\"UTF-8\"?><ListAllMyBucketsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Owner><ID>89123456:user-feiowjfOEIJW</ID><DisplayName>12345678:user-feiowjfOEIJW</DisplayName></Owner><Buckets><Bucket><Name>invoices</Name><CreationDate>2023-02-27T11:46:24.000Z</CreationDate></Bucket></Buckets></ListAllMyBucketsResult>";
           });
 
-        helper.loadConfig('config.test-s3-swift.json', function(err, config) {
+        helper.loadConfig(path.join(__dirname, 'config.test-s3-swift.json'), function(err, config) {
           assert.strictEqual(err, null);
           _config = config;
           storage.connection(_config, 'source', function(err) {

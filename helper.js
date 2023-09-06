@@ -7,10 +7,16 @@ const MODES = {
 }
 const SUPPORTED_MODES = [MODES.UNI, MODES.BI];
 
-function loadConfig(filename, callback) {
+function loadConfig(filenameOrAbsolutePath, callback) {
   let config = {};
+  let configPath = '';
+  if (fs.existsSync(filenameOrAbsolutePath)) {
+    configPath = filenameOrAbsolutePath;
+  } else {
+    configPath = path.join(__dirname, filenameOrAbsolutePath);
+  }
   try {
-    config = JSON.parse(fs.readFileSync(path.join(__dirname, filename)).toString())
+    config = JSON.parse(fs.readFileSync(configPath).toString())
   } catch(err) {
     return callback(new Error("config.json is required | " + err.toString()));
   }
