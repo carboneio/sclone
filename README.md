@@ -153,3 +153,14 @@ For all other synchronisation, Sclone will use the cache as the source of truth 
 - Enable local <> S3/Swift sync
 - Create a ready to use binary / container
 - 👉 Create an issue to suggest ideas
+
+## Supporters
+
+This packaged in maintained by Carbone:
+
+<p>
+  <a href="https://carbone.io" alt="Carbone.io - Efficient PDF / DOCX / XLSX / CSV / HTML / XML generator with templates and JSON">
+    <img src="https://raw.githubusercontent.com/carboneio/rock-req/master/doc/carbone-logo.svg" alt="Carbone.io logo" height="60"/>
+  </a>
+</p>
+
