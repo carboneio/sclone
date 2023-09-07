@@ -1,6 +1,9 @@
 # Sclone ⚡️
 
-Sclone, for "Storage Clone", is a node program to sync files to and from different cloud storage providers supporting S3 and Open Stack SWIFT.
+Sclone, for "Storage Clone", is a program to sync files to and from different cloud storage providers supporting S3 and Open Stack SWIFT.
+
+It offers fast speed thanks to parallelizes workloads and list file caching.
+If you would like to know more about performance of Sclone, refer to [benchmarks](#benchmarks) section.
 
 ## Features
 
@@ -8,15 +11,14 @@ Sclone, for "Storage Clone", is a node program to sync files to and from differe
 - **Bidirectional mode**: mode to make the source and target buckets identicals.
 - **Job scheduler**: Use the Cron Syntax to start the process every minutes, every 30 minutes or anytime you want.
 - **Optional deletion**: by default deletion is disabled: missing files are added on the source/target bucket. When enabled, files are deleted on the source/target bucket.
-- **High performances**: In a first stage, file listing is load into memory, then files transfert is splited into parrallel queues.
-- **Files cached**: at the end of each process, the list of file is cached for better performances on the next execution.
+- **High speed**: Files transfert is splited into parrallel queues. Et the end of each process, the list of file is cached for better performances on the next execution.
 - **Optional integrity check**: MD5 hashes checked for file integrity. Disabled by default.
 - **Metadata preserved**: from s3 to swift or swift to s3, metadatas are preserved/converted automatically.
 - **Production ready**: Battle tested with Terabytes of buckets
 - **Dry run**: Output what operations will be performed without actually carrying out those operations.
 - **Support any S3 and SWIFT provider**:  AWS S3, OVHCloud, Scaleway, Ceph.io,  DigitalOcean Spaces, Cloudflare R2, Seagate Lyve Cloud, Tencent Cloud, Alibaba Cloud OSS, IBM COS S3, Dreamhost S3, GCS, IDrive e2, Synology C2, IONOS Cloud, Minio, Petabox, and more...
 
-## Benchmark
+## Benchmarks
 
 > * Environment: VPS OVH - 2 vCores - 4GB Ram - Bandwidth 500Mbit/s - Debian 12 - Node 20.5.1 - Strasbourg (France)
 > * Default options were used for sclone / rclone / s3sync
