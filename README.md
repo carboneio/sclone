@@ -1,4 +1,4 @@
-# sclone
+# Sclone ⚡️
 
 Sclone, for "Storage Clone", is a node program to sync files to and from different cloud storage providers supporting S3 and Open Stack SWIFT.
 
