@@ -3,7 +3,7 @@
 Sclone, for "Storage Clone", is a program to sync files to and from different cloud storage providers supporting S3 and Open Stack SWIFT.
 
 It offers fast speed thanks to parallelizes workloads and list file caching.
-If you would like to know more about performance of Sclone, refer to [benchmarks](#benchmarks) section.
+If you would like to know more about performance, refer to [benchmarks](#benchmarks) section.
 
 ## Features
 
@@ -41,26 +41,13 @@ Bidirectional sync between two storages located at different region. Every synch
 
 ## Quickstart
 
-> Required: Node 16 must be installed on your laptop/server.
-
-First, clone the project
+1. Download the latest binary from [Release page](https://github.com/carboneio/sclone/releases).
+2. Create a file `config.json` near the binary to define storage credentials, and options. You can copy the `config.default.json` file as an example. Read the [configuration](#configuration) section for details.
+3. Finally start the synchronisation. 
 ```sh
-git clone git@github.com:carboneio/sclone.git
+./sclone-1.0.0-linux
 ```
-Open the sclone directory
-```sh
-cd sclone
-```
-Copy the default configuration and name it `config.json`
-```sh
-cp config.default.json config.json
-```
-Edit the `config.json` by setting the `mode`, `source` and `target` storage crendentials. Read the [configuration](#configuration) section for details.
-Finally start the synchronisation:
-```sh
-node index.js
-```
-Set the option `"dryRun":true` on the `config.json`, it will output what operations will be performed without actually carrying out those operations.
+> 🟢 Tip: Set the option `"dryRun":true` on the `config.json`, it will output on a log file what operations will be performed without actually carrying out those operations.
 
 ## Configuration
 
@@ -156,6 +143,7 @@ For all other synchronisation, Sclone will use the cache as the source of truth 
 
 - ✅ Create a ready to use binary
 - ⬜️ Enable local <> S3/Swift sync
+- ⬜️ Set options through environment variables or CLI
 
 ## Supporters
 
