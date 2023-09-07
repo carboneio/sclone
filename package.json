@@ -1,14 +1,15 @@
 {
-  "name": "sync-swift-s3",
+  "name": "sclone",
   "version": "1.0.0",
-  "description": "",
+  "bin": "index.js",
+  "description": "Clone S3/SWIFT storages between multiple cloud providers (AWS S3, OVHCloud, Scaleway, Ceph.io,  DigitalOcean Spaces, Cloudflare R2, Seagate Lyve Cloud, Tencent Cloud, Alibaba Cloud OSS, IBM COS S3, Dreamhost S3, GCS, IDrive e2, Synology C2, IONOS Cloud, Minio, Petabox)",
   "main": "index.js",
   "scripts": {
     "test": "mocha ./tests",
     "lint": "eslint --fix \"index.js\" \"tests/**/*.js\"",
     "bench": "node ./benchmarks/init.js"
   },
-  "author": "",
+  "author": "Steeve Payraudeau",
   "license": "Apache-2.0",
   "dependencies": {
     "node-cron": "=3.0.2",
