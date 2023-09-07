@@ -42,7 +42,7 @@ Bidirectional sync between two storages located at different region. Every synch
 ## Quickstart
 
 1. Download the latest binary from [Release page](https://github.com/carboneio/sclone/releases).
-2. Create a file `config.json` near the binary to define storage credentials, and options. You can copy the `config.default.json` file as an example. Read the [configuration](#configuration) section for details.
+2. Create a file `config.json` near the binary to define the source/target storage credentials, and options. You can copy the `config.default.json` file as an example. Read the [configuration](#configuration) section for details.
 3. Finally start the synchronisation. 
 ```sh
 ./sclone-1.0.0-linux
@@ -128,9 +128,18 @@ At the root of the project, copy the `config.default.json` and name it `config.j
 
 ## Synchronisation Strategy
 
+### Unidirectional
+
+Sclone adds, updates, and deletes (if enabled) files from a `source` to a `destination` storage, based on files md5 hash.
+
+If the `delete` option is `false`, files on the destination storage are not deleted even if it does not exist on the source storage. In other words, the destination will accumulate all files.
+If the `delete` option is `true`, files on the destination storage that do not exist on the source are deleted. The destination will be an exact copy of the source storage.
+
+During unidirectional sync, no cache file is created.
+
 ### Bidirectional 
 
-Sclone compares files' both md5 and modification times. If the md5 is different, only the newest file is kept.
+The file resolution is not based on the `source` but both storages. Sclone compares files' both md5 and modification times. If the md5 is different, only the newest file is kept. 
 
 For the first synchronisation, even if the `deletion` option is enabled, it won't delete anything. It will make sure the source and target are synchronised. If a file does not exist on one storage, it will be pushed into the other storage, and vice-versa. Finally, a cache of the list of synchronised files is created (named `listFiles.cache.json` by default).
 
