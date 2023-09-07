@@ -150,9 +150,10 @@ For all other synchronisation, Sclone will use the cache as the source of truth 
 
 ## Roadmap
 
-- Enable local <> S3/Swift sync
-- Create a ready to use binary / container
-- 👉 Create an issue to suggest ideas
+> 👉 Create an issue to suggest ideas 👈
+
+- ✅ Create a ready to use binary
+- ⬜️ Enable local <> S3/Swift sync
 
 ## Supporters
 
