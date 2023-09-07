@@ -191,3 +191,5 @@ config-*.json
 *GO
 sourceDataset
 targetDataset
+*-linux
+*-macos

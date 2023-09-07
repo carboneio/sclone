@@ -7,7 +7,8 @@
   "scripts": {
     "test": "mocha ./tests",
     "lint": "eslint --fix \"index.js\" \"tests/**/*.js\"",
-    "bench": "node ./benchmarks/init.js"
+    "bench": "node ./benchmarks/init.js",
+    "build": "./build.sh"
   },
   "author": "Steeve Payraudeau",
   "license": "Apache-2.0",
