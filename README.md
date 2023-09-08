@@ -25,7 +25,7 @@ If you would like to know more about performance, refer to [benchmarks](#benchma
 ## Benchmarks
 
 > * Environment: VPS OVH - 2 vCores - 4GB Ram - Bandwidth 500Mbit/s - Debian 12 - Node 20.5.1 - Strasbourg (France)
-> * Default options were used for sclone / rclone / s3sync
+> * Default options were used for sclone (1.0.0) / rclone (v1.63.1) / s3sync (2.61)
 > * OVH S3 bucket type: normal (and not performance)
 
 Unidirectional sync between a source storage to a target storage located at different region. Every synchronization used the identical 10 GB dataset of 1624 files.
