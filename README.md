@@ -1,4 +1,8 @@
-# Sclone ⚡️
+<p align="center">
+  <img width="150" src="./assets/logo-sclone.png" alt="Vite logo">
+</p>
+
+# Sclone
 
 Sclone, for "Storage Clone", is a program to sync files to and from different cloud storage providers supporting S3 and Open Stack SWIFT.
 
@@ -11,7 +15,7 @@ If you would like to know more about performance, refer to [benchmarks](#benchma
 - **Bidirectional mode**: mode to make the source and target buckets identicals.
 - **Job scheduler**: Use the Cron Syntax to start the process every minutes, every 30 minutes or anytime you want.
 - **Optional deletion**: by default deletion is disabled: missing files are added on the source/target bucket. When enabled, files are deleted on the source/target bucket.
-- **High speed**: Files transfert is splited into parrallel queues. Et the end of each process, the list of file is cached for better performances on the next execution.
+- **High speed**: Files transfers is split into parallel queues. At the end of each process, the list of file is cached for better performances on the next execution.
 - **Optional integrity check**: MD5 hashes checked for file integrity. Disabled by default.
 - **Metadata preserved**: from s3 to swift or swift to s3, metadatas are preserved/converted automatically.
 - **Production ready**: Battle tested with Terabytes of buckets
@@ -59,7 +63,7 @@ At the root of the project, copy the `config.default.json` and name it `config.j
 |---|---|---|
 | **source** | | **Option required**<br> Storage credentials ([S3 Example](#example-of-s3-credentials) / [SWIFT example](#example-of-openstack-swift-credentials)) |
 | **target** | | **Option required**<br>Storage credentials ([S3 Example](#example-of-s3-credentials) / [SWIFT example](#example-of-openstack-swift-credentials)) |
-| **mode** |  | **Option required**<br>Synchronisation mode:<br> ⏺ `unidirectional`: One way synchronization from source to destination without modifying any of the source files and deleting any of the destination files (unless `delete` option is enabled).<br> ⏺ `bidirectional`: Two way synchronisation between a source and target storage, without deleting any of the files (unless `delete` option is enabled). |
+| **mode** |  | **Option required**<br>Synchronisation mode:<br> ⏺ `unidirectional`: One way synchronization from source to destination without modifying any of the source files and deleting any of the destination files (unless `delete` option is enabled).<br> ⏺ `bidirectional`: Two way synchronisation between a source and target storage, without deleting any files (unless `delete` option is enabled). |
 | **cron** |  | Define the period of the program execution, and must follow the CRON syntax, for instance every minutes: `"*/1 * * * *"`. New process are not started until the current synchronisation is not finised. If the option is not defined, the synchronisation is executed immediately. |
 | **delete** | `false` | If `true`, files are deleted according to the synchronization mode logic. |
 | **integrityCheck** | `false` | If `true`, MD5 hashes are checked for file integrity. |
