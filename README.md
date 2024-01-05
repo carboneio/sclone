@@ -1,5 +1,5 @@
 <p align="center">
-  <img width="150" src="./assets/logo-sclone.png" alt="Vite logo">
+  <img width="150" src="./assets/logo-sclone.png" alt="Sclone logo">
 </p>
 
 # Sclone
