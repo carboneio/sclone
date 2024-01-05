@@ -1,6 +1,6 @@
 {
   "name": "sclone",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "bin": "index.js",
   "description": "Clone S3/SWIFT storages between multiple cloud providers (AWS S3, OVHCloud, Scaleway, Ceph.io,  DigitalOcean Spaces, Cloudflare R2, Seagate Lyve Cloud, Tencent Cloud, Alibaba Cloud OSS, IBM COS S3, Dreamhost S3, GCS, IDrive e2, Synology C2, IONOS Cloud, Minio, Petabox)",
   "main": "index.js",
@@ -18,8 +18,8 @@
   },
   "devDependencies": {
     "lorem-ipsum": "=1.0.6",
-    "eslint": "=8.46.0",
+    "eslint": "=8.56.0",
     "mocha": "=10.2.0",
-    "nock": "=13.3.2"
+    "nock": "=13.4.0"
   }
 }

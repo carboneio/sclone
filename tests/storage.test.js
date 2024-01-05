@@ -245,7 +245,7 @@ describe("storage", function() {
         })
       })
 
-      it('should return the list of files from S3/S3 as Maps (paginate automatically)', function(done) {
+      it('should return the list of files from S3/S3 as Maps (paginate automatically) and should removes quotes from etag', function(done) {
 
         const nockListFilesS3 = nock(urlS3)
           .defaultReplyHeaders({ 'content-type': 'application/xml' })
@@ -280,11 +280,20 @@ describe("storage", function() {
             assert.strictEqual(key, value.key);
             assert.strictEqual(value.lastmodified > 0, true);
             assert.strictEqual(value.md5.length > 0, true);
+            assert.strictEqual(value.md5.includes("\""), false);
+            assert.strictEqual(value.md5.includes("&#34;"), false);
             assert.strictEqual(value.bytes > 0, true);
             /** Deleted S3 attributes */
             assert.strictEqual(value?.etag, undefined);
             assert.strictEqual(value?.storageclass, undefined);
             assert.strictEqual(value?.size, undefined);
+            /** Check ETAG value, should not include \" or &#34; */
+            if (value.key === "s3-3-document-5.pdf") {
+              assert.strictEqual(value.md5, "dd58d4bd19ea3e5277844c066ba57b39");
+            }
+            if (value.key === "s3-3-document-4.pdf") {
+              assert.strictEqual(value.md5, "fde6d729123cee4db6bfa3606306bc8e");
+            }
           }
           done();
         })

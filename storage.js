@@ -398,7 +398,7 @@ function fetchListFiles(files, options, callback) {
           _listFileError = err.toString();
           return next(err);
         }
-        
+
         for (let i = 0; i < results.length; i++) {
           const _object = results[i];
           if (!_object?.key && _object?.name) {
@@ -406,7 +406,7 @@ function fetchListFiles(files, options, callback) {
           }
           /** Get md5 and remove unused informations */
           if (storages[type].name === S3) {
-            _object.md5 = _object.etag.replace("\"", "");
+            _object.md5 = _object.etag.replaceAll("\"", "").replaceAll("&#34;", "");
             _object.lastmodified = new Date(new Date(_object.lastmodified).toUTCString()).getTime();
             _object.bytes = _object.size;
             delete _object.etag;
