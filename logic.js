@@ -117,8 +117,11 @@ function computeSync(files, mode, deletion, logSync) {
 
 function syncLogGenerate(data) {
   try {
+    if (fs.existsSync(path.join("logs")) === false) {
+      fs.mkdirSync(path.join("logs"));
+    }
     const date = new Date().toISOString().split('.')[0].replace('T', '-').replace(/:/g, '-') + "Z";
-    fs.writeFileSync(path.join(__dirname, "logs", 'sync-' + date + '.json'), JSON.stringify(data))
+    fs.writeFileSync(path.join("logs", 'sync-' + date + '.json'), JSON.stringify(data))
   } catch(err) {
     console.log("Log sync error catched:" + err.toString());
   }

@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file. This projec
 ## 1.1.0
 - Released the 2024/01/05
 - Fixed Synchro with S3 Scaleway: The etag from ListObjectV2 was returning encoded double quotes "&#34;" instead of "\"".
+- Fixed "logSync" option: if enabled, the `logs` folder is created automatically if it does not exist.
 - Updated dev npm packages
 
 ## 1.0.0 
