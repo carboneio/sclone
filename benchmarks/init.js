@@ -25,13 +25,13 @@ function connection(storage, name) {
         if (name === 'swift') {
             return storageTarget.connection(function(err) {
                 if (err) {
-                    return reject("Connection error: " + err.toString())
+                    return reject("Connection error: " + err.toString());
                 }
                 return resolve();
-            })
+            });
         }
         return resolve();
-    })
+    });
 }
 
 function generateDataSet(quantity, callback) {
@@ -133,7 +133,7 @@ function setupBisyncDataset(dataSetName, callback) {
       path.join(__dirname, `sourceDataset`, source[i])
     );
   }
-  console.log("🟢 Copy done")
+  console.log("🟢 Copy done");
   execQueue('edit-target-dataset', targetUpdated, function(filename, next) {
     fs.readFile(
         path.join(__dirname, `targetDataset`, filename),
@@ -149,14 +149,14 @@ function setupBisyncDataset(dataSetName, callback) {
             }
           );
         }
-    )
+    );
   }, { concurrency: 5 },
   function(err) {
     if (err) {
         console.log("Something went wrong " + err.toString());
     }
     return callback();
-  })
+  });
 }
 
 function uploadDataSet(bucketName, dataSetName) {
@@ -309,8 +309,8 @@ if (mode === "generate") {
             }
             console.log(`🟢 Buckets accessible! `, _config.source.bucket, '/', _config.target.bucket);
             uploadDataSetBi(_config.source.bucket, _config.target.bucket);
-        })
-    })
+        });
+    });
 } else if (mode === "clean") {
     const storageName = process?.env?.npm_config_storage;
   if (!bucketName) {

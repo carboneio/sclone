@@ -1,10 +1,10 @@
 const storageClient = require("tiny-storage-client");
-const execQueue = require('./cqueue')
+const execQueue = require('./cqueue');
 const crypto = require('crypto');
 const helper = require("./helper");
 
 
-const SWIFT = 'swift'
+const SWIFT = 'swift';
 const S3 = 's3';
 const SUPPORTED_STORAGES = [S3, SWIFT];
 const storages = {
@@ -16,7 +16,7 @@ const storages = {
     name  : '',
     bucket: ''
   }
-}
+};
 
 let integrityCheck = false;
 let logQueueStatus = false;
@@ -28,7 +28,7 @@ const getStorageName = (auth) => {
     throw new Error(`Storage ${auth.name} not supported, accepted values: `+ SUPPORTED_STORAGES.toString());
   }
   return auth.name;
-}
+};
 
 function connection (config, type, callback) {
   storages[type] = {
@@ -36,7 +36,7 @@ function connection (config, type, callback) {
     ...storageClient(config[type]),
     name  : getStorageName(config[type]),
     bucket: config[type].bucket
-  }
+  };
   storages[type].setTimeout(240000);
 
   if (config?.integrityCheck === true) {
@@ -53,7 +53,7 @@ function connection (config, type, callback) {
       }
       console.log(`🟢 ${type.charAt(0).toUpperCase() + type.slice(1)} SWIFT connected!`);
       return callback();
-    })
+    });
   } else if (storages[type].name === S3) {
     return storages[type].listBuckets((err, resp) => {
       if (err) {
@@ -64,7 +64,7 @@ function connection (config, type, callback) {
       }
       console.log(`🟢 ${type.charAt(0).toUpperCase() + type.slice(1)} S3 connected! | Buckets: ` + resp.body?.bucket?.reduce((total, val) => total += '[ ' + val?.name + ' ]', ''));
       return callback();
-    })
+    });
   } else {
     return callback(`Storage "${type}" missing a storage "name" on the "config.json"`);
   }
@@ -88,10 +88,10 @@ const listFiles = {
         return callback(err);
       }
       if (resp?.statusCode !== 200) {
-        return callback(new Error(`Status: ${resp?.statusCode} | Body: ${ resp?.body?.error?.code ?? resp?.body?.toString()} | Bucket: ${container}` ))
+        return callback(new Error(`Status: ${resp?.statusCode} | Body: ${ resp?.body?.error?.code ?? resp?.body?.toString()} | Bucket: ${container}` ));
       }
       const _listResult = resp?.body?.contents ?? [];
-      options.results = [...options.results, ..._listResult]
+      options.results = [...options.results, ..._listResult];
       if (options.autoPaging === true && resp.body.istruncated === true) {
         options.queries['start-after'] = _listResult[_listResult.length - 1].key;
         return listFiles[S3](storage, container, options, callback);
@@ -115,8 +115,8 @@ const listFiles = {
       if (err) {
         return callback(err);
       }
-      let _listResult = resp.body;
-      options.results = [...options.results, ..._listResult]
+      const _listResult = resp.body;
+      options.results = [...options.results, ..._listResult];
       if (options.autoPaging === true && _listResult.length === options.queries.limit) {
         options.queries.marker = _listResult[_listResult.length - 1].name;
         return listFiles[SWIFT](storage, container, options, callback);
@@ -124,7 +124,7 @@ const listFiles = {
       return callback(null, options.results);
     });
   }
-}
+};
 
 const deleteFiles = {
   [S3]: function(storage, bucket, objects, callback) {
@@ -151,9 +151,9 @@ const deleteFiles = {
         return callback('Swift Delete files | Delete files error returned: ' + err.toString());
       }
       return callback(null, resp.body);
-    })
+    });
   }
-}
+};
 
 const downloadFile = {
   [S3]: function(storage, bucket, key, callback) {
@@ -168,7 +168,7 @@ const downloadFile = {
         return callback(`S3 downloadFile Code ${resp?.statusCode} | ${ resp?.body?.error?.code ?? resp?.body?.toString()}`);
       }
       if (integrityCheck === true) {
-        const _fileMD5 = getMD5(resp?.body, "hex")
+        const _fileMD5 = getMD5(resp?.body, "hex");
         /** S3 Check file integrity if "etag" exists */
         if (resp?.headers?.["etag"] && "\""+_fileMD5+"\"" !== resp?.headers?.["etag"]) {
           return callback(`S3 downloadFile Integrity check error | file md5 is not valid`);
@@ -177,7 +177,7 @@ const downloadFile = {
         resp.headers["etag"] = _fileMD5;
       }
       return callback(null, resp);
-    })
+    });
   },
   [SWIFT]: function(storage, bucket, key, callback) {
     storage.downloadFile(bucket, key, function(err, resp) {
@@ -191,15 +191,15 @@ const downloadFile = {
           return callback(`Swift downloadFile Error | Integrity check error: file md5 is not valid`);
         }
       }
-      return callback(null, resp)
-    })
+      return callback(null, resp);
+    });
   }
-}
+};
 
 const uploadFile = {
   [S3]: function (storage, bucket, key, body, headers, callback) {
     if (integrityCheck === true) {
-     headers['Content-MD5'] = getMD5(body, 'base64')
+     headers['Content-MD5'] = getMD5(body, 'base64');
     }
     storage.uploadFile(bucket, key, body, { headers: headers }, function(err, resp) {
       if (err) {
@@ -209,20 +209,20 @@ const uploadFile = {
         return callback("S3 uploadFile Error | Status code " + resp.statusCode);
       }
       return callback(null);
-    })
+    });
   },
   [SWIFT]: function(storage, bucket, key, body, headers, callback) {
     if (integrityCheck === true) {
-      headers['ETag'] = getMD5(body)
+      headers['ETag'] = getMD5(body);
      }
     storage.uploadFile(bucket, key, body, { headers: headers }, function (err) {
       if (err) {
         return callback(`Swift upload File | Error on upload: ` + err.toString());
       }
       return callback(null);
-    })
+    });
   }
-}
+};
 
 function syncFiles (filesToUploadTarget, filesToDeleteTarget, filesToUploadSource, filesToDeleteSource, config, callback) {
   const mode = config.mode;
@@ -241,7 +241,7 @@ function syncFiles (filesToUploadTarget, filesToDeleteTarget, filesToUploadSourc
           if (err) {
             return next("syncFiles | delete-files-target | " + err.toString());
           }
-          return next(null, resp)
+          return next(null, resp);
         });
       } catch(err) {
         return next('syncFiles | delete-files-target | Error catched: ' + err.toString());
@@ -262,7 +262,7 @@ function syncFiles (filesToUploadTarget, filesToDeleteTarget, filesToUploadSourc
                   return next("syncFiles | upload-from-source-to-target | Error during upload: " + err.toString());
                 }
                 return next(null);
-              })
+              });
             });
           } catch(err) {
             return next('syncFiles | upload-from-source-to-target error catched: ' + err.toString());
@@ -291,7 +291,7 @@ function syncFiles (filesToUploadTarget, filesToDeleteTarget, filesToUploadSourc
                     return next(`syncFiles | upload-from-target-to-source | Error during upload: ` + err.toString());
                   }
                   return next(null);
-                })
+                });
               });
             } catch(err) {
               return next('syncFiles | upload-from-target-to-source | error catched: ' + err.toString());
@@ -326,10 +326,10 @@ function syncFiles (filesToUploadTarget, filesToDeleteTarget, filesToUploadSourc
                 console.log("Error on deleting source files |" + err.toString());
               }
               return callback();
-            })
-          })
+            });
+          });
         }
-      )
+      );
     });
   } catch(err) {
     return callback('syncFiles | Error Catched : '+ err.toString());
@@ -348,7 +348,7 @@ function syncFiles (filesToUploadTarget, filesToDeleteTarget, filesToUploadSourc
 function convertHeaders (originHeaders, source, target) {
   const sourcePrefix = (source === SWIFT ? 'x-object-meta-' : 'x-amz-meta-');
   const targetPrefix = (target === SWIFT ? 'x-object-meta-' : 'x-amz-meta-');
-  const destHeaders = {}
+  const destHeaders = {};
   for (const [key, value] of Object.entries(originHeaders)) {
     if (key.includes(sourcePrefix) === true) {
       const metaName = targetPrefix + key.replace(sourcePrefix, '');
@@ -356,7 +356,7 @@ function convertHeaders (originHeaders, source, target) {
       let decodedValue = '';
       try {
        decodedValue = decodeURIComponent(value);
-      } catch(err) {
+      } catch(_err) {
         decodedValue = '';
       }
       if (decodedValue !== value) {
@@ -427,7 +427,7 @@ function fetchListFiles(files, options, callback) {
           files[type].set(_object.key, _object);
         }
         return next();
-      })
+      });
     },
     { concurrency: 2, logQueueStatus: logQueueStatus },
     function (err) {
@@ -443,7 +443,7 @@ function fetchListFiles(files, options, callback) {
       }
       return callback();
     }
-  )
+  );
 }
 
 module.exports = {
@@ -451,4 +451,4 @@ module.exports = {
   fetchListFiles,
   syncFiles,
   convertHeaders
-}
+};

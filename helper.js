@@ -4,7 +4,7 @@ const path = require('path');
 const MODES = {
   UNI: "unidirectional",
   BI: "bidirectional"
-}
+};
 const SUPPORTED_MODES = [MODES.UNI, MODES.BI];
 
 function loadConfig(filenameOrAbsolutePath, callback) {
@@ -16,7 +16,7 @@ function loadConfig(filenameOrAbsolutePath, callback) {
     configPath = path.join(__dirname, filenameOrAbsolutePath);
   }
   try {
-    config = JSON.parse(fs.readFileSync(configPath).toString())
+    config = JSON.parse(fs.readFileSync(configPath).toString());
   } catch(err) {
     return callback(new Error("config.json is required | " + err.toString()));
   }
@@ -51,7 +51,7 @@ function formatBytes(bytes, decimals = 2) {
 
 function fetchCache(cacheFilename, mode, files, callback) {
   if (!cacheFilename) {
-    return callback("'cacheFilename' missing from the configuration file")
+    return callback("'cacheFilename' missing from the configuration file");
   }
   if (mode === MODES.UNI) {
     console.log(`✅ Cache loading skipped on "${MODES.UNI}" mode`);
@@ -59,14 +59,14 @@ function fetchCache(cacheFilename, mode, files, callback) {
   }
   fs.readFile(path.join(__dirname, cacheFilename), function(err, data) {
     if (err) {
-      return callback("⭕️ Read cache error | " + err.toString())
+      return callback("⭕️ Read cache error | " + err.toString());
     }
-    let _listFilesCache = []
+    let _listFilesCache = [];
     try {
       _listFilesCache = JSON.parse(data.toString());
     } catch (err) {
       _listFilesCache = [];
-      return callback("JSON parse error catched | " + err.toString())
+      return callback("JSON parse error catched | " + err.toString());
     }
      /** Transform object into a Map **/
     arrayToMap(_listFilesCache, files.cache);
@@ -81,7 +81,7 @@ function saveCache(cacheFilename, data, mode, callback) {
     return callback();
   }
   if (!cacheFilename) {
-    return callback("'cacheFilename' missing from the configuration file")
+    return callback("'cacheFilename' missing from the configuration file");
   }
   fs.writeFile(path.join(__dirname, cacheFilename), data, function(err) {
     if (err) {
@@ -90,7 +90,7 @@ function saveCache(cacheFilename, data, mode, callback) {
     console.log("SYNC DONE > Save new cache...");
     console.log("✅ Cache SAVED!");
     return callback();
-  })
+  });
 }
 
 module.exports = {
@@ -102,4 +102,4 @@ module.exports = {
   fetchCache,
   MODES,
   SUPPORTED_MODES
-}
+};

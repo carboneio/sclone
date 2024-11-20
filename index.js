@@ -1,7 +1,7 @@
 const storage = require('./storage');
 const logic = require('./logic');
 const helper = require('./helper');
-const cron = require('node-cron')
+const cron = require('node-cron');
 
 let alreadyRunning = null;
 
@@ -54,27 +54,28 @@ helper.loadConfig('config.json', (err, config) => {
           if (alreadyRunning !== null) {
             return console.log("Cron sync already running! Started: " + alreadyRunning);
           }
-          console.log("New synchro starting...")
+          console.log("New synchro starting...");
           alreadyRunning = new Date();
           sclone(config, (err) => {
             if (err) {
-              return helper.stop(err.toString());
+              console.log("🔴 Process failed! Start: " + alreadyRunning + " / End: " + new Date() + "/ Details: " + err.toString());
+            } else {
+              console.log("✅ Process done! Start: " + alreadyRunning + " / End: " + new Date());
             }
-            console.log("✅ Process done! Start: " + alreadyRunning + " / End:" + new Date());
             alreadyRunning = null;
-          })
-        })
+          });
+        });
       } else {
         /** 1 time execution */
         sclone(config, (err) => {
           if (err) {
             return helper.stop(err.toString());
           }
-          console.log("✅ Process done!")
-        })
+          console.log("✅ Process done!");
+        });
       }
-    })
-  })
+    });
+  });
 });
 
 function sclone(config, callback) {
@@ -83,7 +84,7 @@ function sclone(config, callback) {
     target        : new Map(),
     source        : new Map(),
     cache         : new Map(),
-  }
+  };
   helper.fetchCache(config?.cacheFilename, config?.mode, files, (err) => {
     if (err) {
       /** Non blocking */
@@ -99,24 +100,24 @@ function sclone(config, callback) {
       const { objectsToDeleteTarget, objectsToUploadTarget, objectsToUploadSource, objectsToDeleteSource } = logic.computeSync(files, config.mode, config?.delete, config?.logSync || config?.dryRun);
 
       if (config.dryRun === true) {
-        console.log("✅ Dry run done: JSON file created in the \"logs\" folder that details all file operations")
+        console.log("✅ Dry run done: JSON file created in the \"logs\" folder that details all file operations");
         return callback();
       }
       if (typeof config?.maxDeletion === 'number' && config?.maxDeletion > 0 && (objectsToDeleteTarget.length >= config.maxDeletion || objectsToDeleteSource.length >= config.maxDeletion)) {
-        return callback(new Error(`Too many element deleted | target: ${objectsToDeleteTarget.length} / source ${objectsToDeleteSource.length} | Process stopped!`))
+        return callback(new Error(`Too many element deleted | target: ${objectsToDeleteTarget.length} / source ${objectsToDeleteSource.length} | Process stopped!`));
       }
       /** Synchronise storages based on lists returned by "computeSync" */
       storage.syncFiles(objectsToUploadTarget, objectsToDeleteTarget, objectsToUploadSource, objectsToDeleteSource, config, function(err) {
         if (err) {
-          return callback(err)
+          return callback(err);
         }
         helper.saveCache(config?.cacheFilename, JSON.stringify([...(files.cache.size > 0 ? files.target : files.source)]), config.mode, function (err) {
           if (err) {
-            return callback(err)
+            return callback(err);
           }
           return callback();
         });
       });
-    })
-  })
+    });
+  });
 }

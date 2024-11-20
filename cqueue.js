@@ -13,7 +13,7 @@ module.exports = (() => {
 
     const _list = lists[index].list;
     const _queueTime = lists[index].time;
-    const _listLength = lists[index].listLength
+    const _listLength = lists[index].listLength;
 
     if (index === lists[index].logIndex) {
       printQueueStatus(lists);
@@ -54,7 +54,7 @@ module.exports = (() => {
       _queueTime.leftTime = _queueTime.averageTime * _list.length;
       _queueTime.done = _listLength - _list.length;
       _queueTime.percentage = Math.round((_queueTime.done) * 100 / _listLength);
-      setTimeout(function(){ unpackGenericQueue(index, lists, functionToExecute, timeout, callback) }, timeout);
+      setTimeout(function(){ unpackGenericQueue(index, lists, functionToExecute, timeout, callback); }, timeout);
     });
   }
 
@@ -65,20 +65,20 @@ module.exports = (() => {
           return reject(err);
         }
         return resolve(res);
-      })
+      });
     });
   }
 
   function msToTime(ms) {
-    let seconds = (ms / 1000).toFixed(1);
-    let minutes = (ms / (1000 * 60)).toFixed(1);
-    let hours = (ms / (1000 * 60 * 60)).toFixed(1);
-    let days = (ms / (1000 * 60 * 60 * 24)).toFixed(1);
+    const seconds = (ms / 1000).toFixed(1);
+    const minutes = (ms / (1000 * 60)).toFixed(1);
+    const hours = (ms / (1000 * 60 * 60)).toFixed(1);
+    const days = (ms / (1000 * 60 * 60 * 24)).toFixed(1);
     if (seconds < 1) return ms + " ms";
     else if (seconds < 60) return seconds + " Sec";
     else if (minutes < 60) return minutes + " Min";
     else if (hours < 24) return hours + " Hrs";
-    else return days + " Days"
+    else return days + " Days";
   }
 
   function printQueueStatus(lists) {
@@ -89,9 +89,9 @@ module.exports = (() => {
     }
 
     // Choose the slowest queue to print the log
-    let _slowest = lists.reduce(function(prev, current) {
-      return (prev.time.leftTime > current.time.leftTime) ? prev : current
-    })
+    const _slowest = lists.reduce(function(prev, current) {
+      return (prev.time.leftTime > current.time.leftTime) ? prev : current;
+    });
     if (!_slowest) {
       return '';
     }
@@ -102,15 +102,15 @@ module.exports = (() => {
       const _time = lists[i].time;
       lists[i].logIndex = _slowest.id;
       lists[i].logged = true;
-      _text += `[${lists[i].id}] ${_time.percentage}% - ${_time.done}/${lists[i].listLength} - Passed time: ${msToTime(_time.passedTime)} | Left Time: ${msToTime(_time.leftTime)} | Avg time/exec: ${msToTime(_time.averageTime)}`
+      _text += `[${lists[i].id}] ${_time.percentage}% - ${_time.done}/${lists[i].listLength} - Passed time: ${msToTime(_time.passedTime)} | Left Time: ${msToTime(_time.leftTime)} | Avg time/exec: ${msToTime(_time.averageTime)}`;
       if (lists[i].done === true) {
         _text += ' ✅ Done';
       }
       if (lists[i].errors.length > 0) {
-        _text += ` 🚩 ${lists[i].errors.length} errors`
+        _text += ` 🚩 ${lists[i].errors.length} errors`;
       }
       if (i !== lists.length) {
-        _text += '\n'
+        _text += '\n';
       }
     }
     process.stdout.write(_text);
@@ -152,10 +152,10 @@ module.exports = (() => {
     /** Create child-lists based on the concurrency option */
     const _lists = chunkify(list, options.concurrency, options.logQueueStatus);
     /** Create an array of promises, each promise is a queue */
-    const _listPromises = []
+    const _listPromises = [];
     _lists.forEach((el, index) => {
-      _listPromises.push(unpackGenericQueuePromisify(index, _lists, functionToExecute, options.delay))
-    })
+      _listPromises.push(unpackGenericQueuePromisify(index, _lists, functionToExecute, options.delay));
+    });
     try {
       /** Execute all queues in parrallel, end only when all queues are done */
       const _res = await Promise.allSettled(_listPromises);
@@ -169,19 +169,19 @@ module.exports = (() => {
         createLogFile(queueName, _logs, 'logs');
       }
       if (_errors.length > 0) {
-        log(`[${queueName}] 🚩 ${_errors.length} errors`)
+        log(`[${queueName}] 🚩 ${_errors.length} errors`);
         createLogFile(queueName, _errors, 'errors');
         const _toRetry = _errors.map(value => value.element);
         if (options.try < options.retry) {
           options.try += 1;
-          log(`[${queueName}] Retry to re-execute the process on failled elements...`)
+          log(`[${queueName}] Retry to re-execute the process on failled elements...`);
           return execQueue(queueName, _toRetry, functionToExecute, options, callback);
         } else {
-          log(`[${queueName}] END - Stop retrying, check the error file!`)
+          log(`[${queueName}] END - Stop retrying, check the error file!`);
         }
       } else {
         if (options.logEnabled === true) {
-          log(`[${queueName}] END - ${getPerfSummary(_lists, _results.length, _errors.length, _logs.length)}`)
+          log(`[${queueName}] END - ${getPerfSummary(_lists, _results.length, _errors.length, _logs.length)}`);
         }
       }
     } catch (err) {
@@ -192,7 +192,7 @@ module.exports = (() => {
   }
 
   function createLogFile(queueName, content, label) {
-    const _filename = new Date().toISOString().slice(0, 16) + `-${queueName.replace(/\s/g, '-').toLowerCase()}${label ? '-' + label : ''}.json`
+    const _filename = new Date().toISOString().slice(0, 16) + `-${queueName.replace(/\s/g, '-').toLowerCase()}${label ? '-' + label : ''}.json`;
     const _path = path.join(__dirname, 'logs', _filename);
     log(`[${queueName}] Created ${label ? label + ' ' : ''}file: ${_path}`);
 
@@ -204,8 +204,8 @@ module.exports = (() => {
   }
 
   function chunkify(list, size, logQueueStatus) {
-    let result = [];
-    let array = [...list];
+    const result = [];
+    const array = [...list];
     for (let i = size; i > 0; i--) {
       const _chunkList = array.splice(0, Math.ceil(array.length / i));
       result.push(
@@ -236,13 +236,13 @@ module.exports = (() => {
 
   function getPerfSummary(lists, resultsLength, errorsLength, logsLength) {
     // Choose the slowest queue to print the log
-    let _slowest = lists.reduce(function(prev, current) {
-      return (prev.time.passedTime > current.time.passedTime) ? prev : current
-    })
+    const _slowest = lists.reduce(function(prev, current) {
+      return (prev.time.passedTime > current.time.passedTime) ? prev : current;
+    });
     if (_slowest) {
-      return `Duration: ${msToTime(_slowest.time.passedTime)} | Avg time/exec: ${msToTime(_slowest.time.averageTime)} | ${errorsLength > 0 ? '🚩 ' : ''}Errors: ${errorsLength} | Returned: ${resultsLength} | Logs: ${logsLength}`
+      return `Duration: ${msToTime(_slowest.time.passedTime)} | Avg time/exec: ${msToTime(_slowest.time.averageTime)} | ${errorsLength > 0 ? '🚩 ' : ''}Errors: ${errorsLength} | Returned: ${resultsLength} | Logs: ${logsLength}`;
     } else {
-      return `Error get performances summary`
+      return `Error get performances summary`;
     }
   }
 
@@ -256,4 +256,4 @@ module.exports = (() => {
     return console.log(level === 'error' ? `❗️ ${msg}` : msg );
   }
   return execQueue;
-})()
+})();

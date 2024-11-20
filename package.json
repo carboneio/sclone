@@ -6,20 +6,20 @@
   "main": "index.js",
   "scripts": {
     "test": "mocha ./tests",
-    "lint": "eslint --fix \"index.js\" \"tests/**/*.js\"",
+    "lint": "eslint --fix",
     "bench": "node ./benchmarks/init.js",
     "build": "./build.sh"
   },
   "author": "Steeve Payraudeau",
   "license": "Apache-2.0",
   "dependencies": {
-    "node-cron": "=3.0.2",
-    "tiny-storage-client": "=3.0.1"
+    "node-cron": "=3.0.3",
+    "tiny-storage-client": "=3.3.0"
   },
   "devDependencies": {
     "lorem-ipsum": "=1.0.6",
-    "eslint": "=8.56.0",
-    "mocha": "=10.2.0",
-    "nock": "=13.4.0"
+    "eslint": "=9.15.0",
+    "mocha": "=10.8.2",
+    "nock": "=13.5.6"
   }
 }

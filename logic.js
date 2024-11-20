@@ -27,7 +27,7 @@ function computeSync(files, mode, deletion, logSync) {
   const objectsToDeleteTarget = [];
   let objectsToUpdateTarget = 0;
 
-  console.log(`Total Files BEFORE SYNC S/T: ${files.source.size}/${files.target.size}`)
+  console.log(`Total Files BEFORE SYNC S/T: ${files.source.size}/${files.target.size}`);
 
   /** Compare listFilesSwift <> listFilesS3 and set action: toDeleteTarget / toUploadSource  */
   for (const [key, value] of files.target) {
@@ -101,10 +101,10 @@ function computeSync(files, mode, deletion, logSync) {
       objectsToUpdateTarget++;
     }
   }
-  console.log(`Total Files AFTER SYNC S/T: ${files.source.size}/${files.target.size}\nSummary Source | Uploads: ${objectsToUploadSource.length} (Updates ${objectsToUpdateSource}) / Deletions: ${objectsToDeleteSource.length} |\nSummary Target | Uploads: ${objectsToUploadTarget.length} (Updates ${objectsToUpdateTarget}) / Deletions: ${objectsToDeleteTarget.length} |`)
+  console.log(`Total Files AFTER SYNC S/T: ${files.source.size}/${files.target.size}\nSummary Source | Uploads: ${objectsToUploadSource.length} (Updates ${objectsToUpdateSource}) / Deletions: ${objectsToDeleteSource.length} |\nSummary Target | Uploads: ${objectsToUploadTarget.length} (Updates ${objectsToUpdateTarget}) / Deletions: ${objectsToDeleteTarget.length} |`);
 
   if (logSync === true) {
-    syncLogGenerate({ toUploadSource: objectsToUploadSource, toDeleteSource: objectsToDeleteSource, toUploadTarget: objectsToUploadTarget, toDeleteTarget: objectsToDeleteTarget })
+    syncLogGenerate({ toUploadSource: objectsToUploadSource, toDeleteSource: objectsToDeleteSource, toUploadTarget: objectsToUploadTarget, toDeleteTarget: objectsToDeleteTarget });
   }
 
   return {
@@ -112,7 +112,7 @@ function computeSync(files, mode, deletion, logSync) {
     objectsToDeleteSource,
     objectsToUploadTarget,
     objectsToDeleteTarget
-  }
+  };
 }
 
 function syncLogGenerate(data) {
@@ -121,7 +121,7 @@ function syncLogGenerate(data) {
       fs.mkdirSync(path.join("logs"));
     }
     const date = new Date().toISOString().split('.')[0].replace('T', '-').replace(/:/g, '-') + "Z";
-    fs.writeFileSync(path.join("logs", 'sync-' + date + '.json'), JSON.stringify(data))
+    fs.writeFileSync(path.join("logs", 'sync-' + date + '.json'), JSON.stringify(data));
   } catch(err) {
     console.log("Log sync error catched:" + err.toString());
   }
@@ -158,4 +158,4 @@ module.exports = {
   computeSync,
   syncLogClean,
   syncLogGenerate
-}
+};
