@@ -1,5 +1,5 @@
 {
-  "name": "@steevepay/sclone",
+  "name": "sclone",
   "version": "1.1.0",
   "bin": "index.js",
   "description": "Clone S3/SWIFT storages between multiple cloud providers (AWS S3, OVHCloud, Scaleway, Ceph.io,  DigitalOcean Spaces, Cloudflare R2, Seagate Lyve Cloud, Tencent Cloud, Alibaba Cloud OSS, IBM COS S3, Dreamhost S3, GCS, IDrive e2, Synology C2, IONOS Cloud, Minio, Petabox)",
@@ -17,9 +17,10 @@
     "tiny-storage-client": "=3.3.0"
   },
   "devDependencies": {
-    "lorem-ipsum": "=1.0.6",
     "eslint": "=9.15.0",
+    "lorem-ipsum": "=1.0.6",
     "mocha": "=10.8.2",
-    "nock": "=13.5.6"
+    "nock": "=13.5.6",
+    "sinon": "^19.0.2"
   }
 }

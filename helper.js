@@ -5,9 +5,13 @@ const MODES = {
   UNI: "unidirectional",
   BI: "bidirectional"
 };
+
 const SUPPORTED_MODES = [MODES.UNI, MODES.BI];
 
 function loadConfig(filenameOrAbsolutePath, callback) {
+  /** TODO: 
+   * - [ ] define a default config 
+   * */
   let config = {};
   let configPath = '';
   if (fs.existsSync(filenameOrAbsolutePath)) {
@@ -59,7 +63,7 @@ function fetchCache(cacheFilename, mode, files, callback) {
   }
   fs.readFile(path.join(__dirname, cacheFilename), function(err, data) {
     if (err) {
-      return callback("⭕️ Read cache error | " + err.toString());
+      return callback("🔴 Read cache error | " + err.toString());
     }
     let _listFilesCache = [];
     try {
