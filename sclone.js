@@ -78,7 +78,7 @@ function sclone (config, next) {
                         if (err) {
                             console.log("🔴 Process failed! Start: " + alreadyRunning + " / End: " + new Date() + "/ Details: " + err.toString());
                         } else {
-                            console.log("✅ Process done! Start: " + alreadyRunning + " / End: " + new Date());
+                            console.log("🟢 Process done! Start: " + alreadyRunning + " / End: " + new Date());
                         }
                         alreadyRunning = null;
                     });
@@ -91,7 +91,7 @@ function sclone (config, next) {
                     if (err) {
                         return next(err);
                     }
-                    console.log("✅ Process done!");
+                    console.log("🟢 Process done!");
                     return next();
                 });
             }
@@ -122,7 +122,7 @@ function startSync(config, callback) {
       const { objectsToDeleteTarget, objectsToUploadTarget, objectsToUploadSource, objectsToDeleteSource } = logic.computeSync(files, config.mode, config?.delete, config?.logSync || config?.dryRun);
 
       if (config.dryRun === true) {
-        console.log("✅ Dry run done: JSON file created in the \"logs\" folder that details all file operations");
+        console.log("🟢 Dry run done: JSON file created in the \"logs\" folder that details all file operations");
         return callback();
       }
       if (typeof config?.maxDeletion === 'number' && config?.maxDeletion > 0 && (objectsToDeleteTarget.length >= config.maxDeletion || objectsToDeleteSource.length >= config.maxDeletion)) {

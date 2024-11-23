@@ -58,7 +58,7 @@ function fetchCache(cacheFilename, mode, files, callback) {
     return callback("'cacheFilename' missing from the configuration file");
   }
   if (mode === MODES.UNI) {
-    console.log(`✅ Cache loading skipped on "${MODES.UNI}" mode`);
+    console.log(`⚪️ Cache loading skipped on "${MODES.UNI}" mode`);
     return callback();
   }
   fs.readFile(path.join(__dirname, cacheFilename), function(err, data) {
@@ -81,7 +81,7 @@ function fetchCache(cacheFilename, mode, files, callback) {
 
 function saveCache(cacheFilename, data, mode, callback) {
   if (mode === MODES.UNI) {
-    console.log(`🟢 Cache saving skipped on "${MODES.UNI}" mode`);
+    console.log(`⚪️ Cache saving skipped on "${MODES.UNI}" mode`);
     return callback();
   }
   if (!cacheFilename) {

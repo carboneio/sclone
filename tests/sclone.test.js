@@ -92,7 +92,7 @@ describe("Sclone", function () {
             });
         });
 
-        it.skip('should return an error if the process returns an error (code 500 or request faillure)', function (done) {
+        it('should return an error if the process returns an error (code 500 or request faillure)', function (done) {
             process.env.SCLONE_CONFIG = 'tests/config.test-cron-disabled.json';
             delete process.env.SCLONE_CRON;
     
@@ -129,7 +129,7 @@ describe("Sclone", function () {
                 .reply(500);
 
             sclone((err) => {
-                assert.strictEqual(err, null);
+                assert.strictEqual(err.toString().includes("Error: All S3 storages are not available"), true);
                 assert.strictEqual(nockAuthS3GRA.pendingMocks().length, 0);
                 assert.strictEqual(nockAuthS3SBG.pendingMocks().length, 0);
                 assert.strictEqual(nockListFilesS3GRA.pendingMocks().length, 0);
@@ -138,18 +138,18 @@ describe("Sclone", function () {
                 let _output = [];
                 _calls.forEach(el => { _output.push(el.args[0]) })
                 console.log(_output);
-                // assert.strictEqual(getOccurrence(_output, 'Synchronisation: unidirectional'), 1)
-                // assert.strictEqual(getOccurrence(_output, 'Deletion: Disabled'), 1)
-                // assert.strictEqual(getOccurrence(_output, 'Cron Scheduled: * * * * * *'), 1)
-                // assert.strictEqual(getOccurrence(_output, 'New synchro starting...'), 2)
-                // assert.strictEqual(getOccurrence(_output, 'Error: THIS IS A MAJOR ERROR'), 2)
-                // assert.strictEqual(getOccurrence(_output, 'Status code: 500'), 2)
-                // assert.strictEqual(getOccurrence(_output, 'Process failed!'), 1)
-                // assert.strictEqual(getOccurrence(_output, 'Summary Source'), 1)
-                // assert.strictEqual(getOccurrence(_output, 'Summary Target'), 1)
-                // assert.strictEqual(getOccurrence(_output, 'Cache loading skipped on "unidirectional" mode'), 2)
-                // assert.strictEqual(getOccurrence(_output, 'Cache saving skipped on "unidirectional" mode'), 1)
-                // assert.strictEqual(getOccurrence(_output, 'Process done'), 1)
+                assert.strictEqual(getOccurrence(_output, 'Synchronisation: unidirectional'), 1)
+                assert.strictEqual(getOccurrence(_output, 'Deletion: Disabled'), 1)
+                assert.strictEqual(getOccurrence(_output, 'Cron: Disabled'), 1)
+                assert.strictEqual(getOccurrence(_output, 'Source S3 connected!'), 1)
+                assert.strictEqual(getOccurrence(_output, 'Target S3 connected!'), 1)
+                assert.strictEqual(getOccurrence(_output, 'New synchro starting...'), 0)
+                assert.strictEqual(getOccurrence(_output, 'Error: THIS IS A MAJOR ERROR'), 2)
+                assert.strictEqual(getOccurrence(_output, 'Status code: 500'), 2)
+                assert.strictEqual(getOccurrence(_output, 'Retry to re-execute the process on failled elements...'), 1)
+                assert.strictEqual(getOccurrence(_output, 'Stop retrying, check the error file!'), 1)
+                assert.strictEqual(getOccurrence(_output, 'Cache loading skipped on "unidirectional" mode'), 1)
+                assert.strictEqual(getOccurrence(_output, 'Cache saving skipped on "unidirectional" mode'), 0)
                 done();
             });
         })
