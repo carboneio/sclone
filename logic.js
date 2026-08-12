@@ -134,6 +134,9 @@ function syncLogClean(interval) {
     interval = interval ?? 24 * 60 * 60 * 1000; // Every day
     const uploadsDir = path.join(__dirname, "logs");
     fs.readdir(uploadsDir, function(err, files) {
+      if (err || !files) {
+        return console.log("Clean log error: " + (err?.toString() ?? "no files"));
+      }
       files.forEach(function(file) {
         fs.stat(path.join(uploadsDir, file), function(err, stat) {
           if (err) {

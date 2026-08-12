@@ -601,6 +601,8 @@ describe("logic", function() {
 });
 
 beforeEach(function(done) {
+  /** The logs folder is gitignored: it does not exist on a fresh clone (CI) */
+  fs.mkdirSync(path.join(__dirname, '..', 'logs'), { recursive: true });
   const _files = fs.readdirSync(path.join(__dirname, '..', 'logs'));
   for (let i = 0; i < _files.length; i++) {
     if (_files[i].includes('.json') === true) {
