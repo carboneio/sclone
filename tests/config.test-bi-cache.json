@@ -1,0 +1,23 @@
+{
+  "test": true,
+  "mode": "bidirectional",
+  "delete": true,
+  "cacheFilename": "tests/test-bi.cache.json",
+  "integrityCheck": false,
+  "source": {
+    "name": "s3",
+    "accessKeyId": "access-key-id",
+    "secretAccessKey": "secret-access-key",
+    "url": "s3.gra.first.cloud.test",
+    "region": "gra",
+    "bucket": "invoices"
+  },
+  "target": {
+    "name": "s3",
+    "accessKeyId": "access-key-id",
+    "secretAccessKey": "secret-access-key",
+    "url": "s3.sbg.first.cloud.test",
+    "region": "sbg",
+    "bucket": "invoices"
+  }
+}

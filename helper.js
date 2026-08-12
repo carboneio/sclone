@@ -4,7 +4,7 @@ const path = require('path');
 const MODES = {
   UNI: "unidirectional",
   BI: "bidirectional"
-}
+};
 const SUPPORTED_MODES = [MODES.UNI, MODES.BI];
 
 function loadConfig(filenameOrAbsolutePath, callback) {
@@ -16,7 +16,7 @@ function loadConfig(filenameOrAbsolutePath, callback) {
     configPath = path.join(__dirname, filenameOrAbsolutePath);
   }
   try {
-    config = JSON.parse(fs.readFileSync(configPath).toString())
+    config = JSON.parse(fs.readFileSync(configPath).toString());
   } catch(err) {
     return callback(new Error("config.json is required | " + err.toString()));
   }
@@ -49,24 +49,45 @@ function formatBytes(bytes, decimals = 2) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + " " + sizes[i];
 }
 
+/**
+ * Resolve the cache file location:
+ * - absolute paths are used as-is
+ * - relative paths are resolved against the current working directory
+ * - backward compatibility: if no cache exists in the working directory but one exists next to
+ *   the source code (where versions <= 1.1.0 stored it), the legacy location keeps being used
+ * New caches are not resolved against `__dirname`: inside a packaged binary (pkg), it points
+ * to the read-only snapshot filesystem and the cache could never be written.
+ */
+function resolveCachePath(cacheFilename) {
+  if (path.isAbsolute(cacheFilename) === true) {
+    return cacheFilename;
+  }
+  const _cachePath = path.join(process.cwd(), cacheFilename);
+  const _legacyCachePath = path.join(__dirname, cacheFilename);
+  if (fs.existsSync(_cachePath) === false && fs.existsSync(_legacyCachePath) === true) {
+    return _legacyCachePath;
+  }
+  return _cachePath;
+}
+
 function fetchCache(cacheFilename, mode, files, callback) {
   if (!cacheFilename) {
-    return callback("'cacheFilename' missing from the configuration file")
+    return callback("'cacheFilename' missing from the configuration file");
   }
   if (mode === MODES.UNI) {
     console.log(`✅ Cache loading skipped on "${MODES.UNI}" mode`);
     return callback();
   }
-  fs.readFile(path.join(__dirname, cacheFilename), function(err, data) {
+  fs.readFile(resolveCachePath(cacheFilename), function(err, data) {
     if (err) {
-      return callback("⭕️ Read cache error | " + err.toString())
+      return callback("⭕️ Read cache error | " + err.toString());
     }
-    let _listFilesCache = []
+    let _listFilesCache = [];
     try {
       _listFilesCache = JSON.parse(data.toString());
     } catch (err) {
       _listFilesCache = [];
-      return callback("JSON parse error catched | " + err.toString())
+      return callback("JSON parse error catched | " + err.toString());
     }
      /** Transform object into a Map **/
     arrayToMap(_listFilesCache, files.cache);
@@ -81,16 +102,16 @@ function saveCache(cacheFilename, data, mode, callback) {
     return callback();
   }
   if (!cacheFilename) {
-    return callback("'cacheFilename' missing from the configuration file")
+    return callback("'cacheFilename' missing from the configuration file");
   }
-  fs.writeFile(path.join(__dirname, cacheFilename), data, function(err) {
+  fs.writeFile(resolveCachePath(cacheFilename), data, function(err) {
     if (err) {
       return callback("Save cache error:" + err.toString());
     }
     console.log("SYNC DONE > Save new cache...");
     console.log("✅ Cache SAVED!");
     return callback();
-  })
+  });
 }
 
 module.exports = {
@@ -102,4 +123,4 @@ module.exports = {
   fetchCache,
   MODES,
   SUPPORTED_MODES
-}
+};

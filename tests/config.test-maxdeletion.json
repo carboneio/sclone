@@ -1,0 +1,24 @@
+{
+  "test": true,
+  "mode": "unidirectional",
+  "delete": true,
+  "maxDeletion": 3,
+  "cacheFilename": "listFiles.cache.json",
+  "integrityCheck": false,
+  "source": {
+    "name": "s3",
+    "accessKeyId": "access-key-id",
+    "secretAccessKey": "secret-access-key",
+    "url": "s3.gra.first.cloud.test",
+    "region": "gra",
+    "bucket": "invoices"
+  },
+  "target": {
+    "name": "s3",
+    "accessKeyId": "access-key-id",
+    "secretAccessKey": "secret-access-key",
+    "url": "s3.sbg.first.cloud.test",
+    "region": "sbg",
+    "bucket": "invoices"
+  }
+}

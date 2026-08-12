@@ -1,25 +1,71 @@
 {
   "name": "@steevepay/sclone",
-  "version": "1.1.0",
-  "bin": "index.js",
+  "version": "1.2.0",
   "description": "Clone S3/SWIFT storages between multiple cloud providers (AWS S3, OVHCloud, Scaleway, Ceph.io,  DigitalOcean Spaces, Cloudflare R2, Seagate Lyve Cloud, Tencent Cloud, Alibaba Cloud OSS, IBM COS S3, Dreamhost S3, GCS, IDrive e2, Synology C2, IONOS Cloud, Minio, Petabox)",
   "main": "index.js",
+  "bin": {
+    "sclone": "index.js"
+  },
+  "files": [
+    "index.js",
+    "sclone.js",
+    "storage.js",
+    "logic.js",
+    "helper.js",
+    "config.default.json",
+    "CHANGELOG.md",
+    "assets/logo-sclone.png"
+  ],
   "scripts": {
     "test": "mocha ./tests",
-    "lint": "eslint --fix \"index.js\" \"tests/**/*.js\"",
+    "lint": "eslint --fix",
     "bench": "node ./benchmarks/init.js",
-    "build": "./build.sh"
+    "build": "pkg -t latest-linux-x64,latest-macos-x64 -o sclone-$npm_package_version ."
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/carboneio/sclone.git"
+  },
+  "homepage": "https://github.com/carboneio/sclone#readme",
+  "bugs": {
+    "url": "https://github.com/carboneio/sclone/issues"
+  },
+  "keywords": [
+    "s3",
+    "swift",
+    "openstack",
+    "sync",
+    "synchronisation",
+    "clone",
+    "backup",
+    "storage",
+    "bucket",
+    "aws",
+    "ovhcloud",
+    "scaleway",
+    "minio",
+    "cloudflare-r2",
+    "rclone"
+  ],
   "author": "Steeve Payraudeau",
   "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
-    "node-cron": "=3.0.2",
-    "tiny-storage-client": "=3.0.1"
+    "@carboneio/cqueue": "1.0.0",
+    "node-cron": "4.6.0",
+    "tiny-storage-client": "3.5.0"
   },
   "devDependencies": {
-    "lorem-ipsum": "=1.0.6",
-    "eslint": "=8.56.0",
-    "mocha": "=10.2.0",
-    "nock": "=13.4.0"
+    "@yao-pkg/pkg": "6.22.0",
+    "eslint": "10.8.1",
+    "lorem-ipsum": "3.0.0",
+    "mocha": "11.8.0",
+    "nock": "14.0.17",
+    "sinon": "22.1.0"
   }
 }

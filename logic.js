@@ -27,7 +27,7 @@ function computeSync(files, mode, deletion, logSync) {
   const objectsToDeleteTarget = [];
   let objectsToUpdateTarget = 0;
 
-  console.log(`Total Files BEFORE SYNC S/T: ${files.source.size}/${files.target.size}`)
+  console.log(`Total Files BEFORE SYNC S/T: ${files.source.size}/${files.target.size}`);
 
   /** Compare listFilesSwift <> listFilesS3 and set action: toDeleteTarget / toUploadSource  */
   for (const [key, value] of files.target) {
@@ -91,8 +91,10 @@ function computeSync(files, mode, deletion, logSync) {
       objectsToUploadTarget.push(value);
     }
 
-    /** If a file exists on both side, but the content changed */
-    if ((mode === helper.MODES.BI && _objectTarget !== undefined && _objectTarget.md5 !== value.md5 && value.lastmodified > _objectTarget.lastmodified) ||
+    /** If a file exists on both side, but the content changed.
+     * ">=" and not ">": when the timestamps are identical, the source version wins the conflict
+     * (the target loop above uses a strict ">", so only this direction fires on a tie) */
+    if ((mode === helper.MODES.BI && _objectTarget !== undefined && _objectTarget.md5 !== value.md5 && value.lastmodified >= _objectTarget.lastmodified) ||
         (mode === helper.MODES.UNI && _objectTarget !== undefined && _objectTarget.md5 !== value.md5)) {
       files.target.set(key, value);
       files.cache.set(key, value);
@@ -101,10 +103,10 @@ function computeSync(files, mode, deletion, logSync) {
       objectsToUpdateTarget++;
     }
   }
-  console.log(`Total Files AFTER SYNC S/T: ${files.source.size}/${files.target.size}\nSummary Source | Uploads: ${objectsToUploadSource.length} (Updates ${objectsToUpdateSource}) / Deletions: ${objectsToDeleteSource.length} |\nSummary Target | Uploads: ${objectsToUploadTarget.length} (Updates ${objectsToUpdateTarget}) / Deletions: ${objectsToDeleteTarget.length} |`)
+  console.log(`Total Files AFTER SYNC S/T: ${files.source.size}/${files.target.size}\nSummary Source | Uploads: ${objectsToUploadSource.length} (Updates ${objectsToUpdateSource}) / Deletions: ${objectsToDeleteSource.length} |\nSummary Target | Uploads: ${objectsToUploadTarget.length} (Updates ${objectsToUpdateTarget}) / Deletions: ${objectsToDeleteTarget.length} |`);
 
   if (logSync === true) {
-    syncLogGenerate({ toUploadSource: objectsToUploadSource, toDeleteSource: objectsToDeleteSource, toUploadTarget: objectsToUploadTarget, toDeleteTarget: objectsToDeleteTarget })
+    syncLogGenerate({ toUploadSource: objectsToUploadSource, toDeleteSource: objectsToDeleteSource, toUploadTarget: objectsToUploadTarget, toDeleteTarget: objectsToDeleteTarget });
   }
 
   return {
@@ -112,7 +114,7 @@ function computeSync(files, mode, deletion, logSync) {
     objectsToDeleteSource,
     objectsToUploadTarget,
     objectsToDeleteTarget
-  }
+  };
 }
 
 function syncLogGenerate(data) {
@@ -121,7 +123,7 @@ function syncLogGenerate(data) {
       fs.mkdirSync(path.join("logs"));
     }
     const date = new Date().toISOString().split('.')[0].replace('T', '-').replace(/:/g, '-') + "Z";
-    fs.writeFileSync(path.join("logs", 'sync-' + date + '.json'), JSON.stringify(data))
+    fs.writeFileSync(path.join("logs", 'sync-' + date + '.json'), JSON.stringify(data));
   } catch(err) {
     console.log("Log sync error catched:" + err.toString());
   }
@@ -158,4 +160,4 @@ module.exports = {
   computeSync,
   syncLogClean,
   syncLogGenerate
-}
+};

@@ -1,0 +1,15 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+  <Name>invoices</Name>
+  <Prefix/>
+  <KeyCount>1</KeyCount>
+  <MaxKeys>10000</MaxKeys>
+  <IsTruncated>false</IsTruncated>
+  <Contents>
+    <Key>invoice-2024-01.pdf</Key>
+    <LastModified>2023-03-07T17:03:59.000Z</LastModified>
+    <ETag>"a55b475be5fc06d42e1baf84231253ce"</ETag>
+    <Size>9</Size>
+    <StorageClass>STANDARD</StorageClass>
+  </Contents>
+</ListBucketResult>

@@ -1,8 +1,8 @@
 const assert = require('assert');
 const storage = require('../storage');
-const nock = require('nock')
-const path = require('path')
-const fs = require('fs')
+const nock = require('nock');
+const path = require('path');
+const fs = require('fs');
 const helper = require('../helper');
 
 /**
@@ -15,17 +15,17 @@ const files = {
   target        : new Map(),
   source        : new Map(),
   cache         : new Map(),
-}
+};
 const urlS3 = 'https://s3.gra.first.cloud.test';
 const urlS3SBG = 'https://s3.sbg.first.cloud.test';
 
 const urlAuthSwift   = 'https://auth.cloud.ovh.net/v3';
 const urlSwift = 'https://storage.gra.cloud.ovh.net/v1/AUTH_ce3e510224d740a685cb0ae7bdb8ebc3';
 const urlSwiftSBG = 'https://storage.sbg.cloud.ovh.net/v1/AUTH_ce3e510224d740a685cb0ae7bdb8ebc3';
-const tokenAuthSwift = 'gAAAAABe8JlEGYPUwwOyjqgUBl11gSjDOw5VTtUZ5n8SWxghRGwakDkP_lelLfRctzyhbIFUXjsdPaGmV2xicL-9333lJUnL3M4JYlYCYMWsX3IhnLPYboyti835VdhAHQ7K_d0OC4OYvM04bvL3w_uSbkxPmL27uO0ISUgQdB_mHxoYlol8xYI'
+const tokenAuthSwift = 'gAAAAABe8JlEGYPUwwOyjqgUBl11gSjDOw5VTtUZ5n8SWxghRGwakDkP_lelLfRctzyhbIFUXjsdPaGmV2xicL-9333lJUnL3M4JYlYCYMWsX3IhnLPYboyti835VdhAHQ7K_d0OC4OYvM04bvL3w_uSbkxPmL27uO0ISUgQdB_mHxoYlol8xYI';
 
 
-let _config = {}
+let _config = {};
 
 describe("storage", function() {
 
@@ -50,15 +50,15 @@ describe("storage", function() {
           assert.strictEqual(err, undefined);
           assert.strictEqual(nockAuthSwift.pendingMocks().length, 0);
           assert.strictEqual(nockAuthS3.pendingMocks().length, 0);
-          files.source = new Map()
-          files.target = new Map()
-          files.cache = new Map()
+          files.source = new Map();
+          files.target = new Map();
+          files.cache = new Map();
           return done();
-        })
-      })
-    })
+        });
+      });
+    });
 
-  })
+  });
 
   describe('syncFiles', function() {
 
@@ -79,12 +79,12 @@ describe("storage", function() {
         { 'key': 'file2.txt' },
         { 'key': 'file3.txt' },
         { 'key': 'file4.txt' }
-      ]
+      ];
       storage.syncFiles([], _filestoDeleteTarget, [], [], { mode: helper.MODES.BI }, function(err) {
         assert.strictEqual(err, undefined);
         assert.strictEqual(nockBulkDeleteS3.pendingMocks().length, 0);
         done();
-      })
+      });
     });
 
     it('should bulkDeletes objects on the S3 and should split the list into 2 chunk of 1000 objects (more than 1000 objects)', function(done) {
@@ -108,16 +108,16 @@ describe("storage", function() {
           return '';
         });
 
-      const _filestoDeleteS3 = []
+      const _filestoDeleteS3 = [];
 
       for (let i = 0; i < 2000; i++) {
-        _filestoDeleteS3.push({ key: `files${i}.txt` })
+        _filestoDeleteS3.push({ key: `files${i}.txt` });
       }
       storage.syncFiles([], _filestoDeleteS3, [], [], { mode: helper.MODES.BI }, function(err) {
         assert.strictEqual(err, undefined);
         assert.strictEqual(nockBulkDeleteS3.pendingMocks().length, 0);
         done();
-      })
+      });
     });
 
     it('should upload objects on the target storage with headers (S3)', function(done) {
@@ -139,7 +139,6 @@ describe("storage", function() {
 
       const nockSwiftDownload = nock(urlSwift)
         .defaultReplyHeaders({
-          'content-length': '31078',
           'x-object-meta-name': 'RÃ©capitulatif des quantitÃ©s sa',
           'x-object-meta-desc': 'RÃ©capitulatif des quantitÃ©s saisies par Ã©lÃ©ment de repas dans chaque trame de menu par site',
           'last-modified': 'Thu, 23 Feb 2023 01:14:34 GMT',
@@ -160,14 +159,14 @@ describe("storage", function() {
 
       const _filesToUploadS3 = [];
 
-      _filesToUploadS3.push({ key: `1!file.txt` })
+      _filesToUploadS3.push({ key: `1!file.txt` });
 
       storage.syncFiles(_filesToUploadS3, [], [], [], { mode: helper.MODES.BI }, function(err) {
         assert.strictEqual(err, undefined);
         assert.strictEqual(nockS3Upload.pendingMocks().length, 0);
         assert.strictEqual(nockSwiftDownload.pendingMocks().length, 0);
         done();
-      })
+      });
     });
 
     it('should upload objects on the source storage (swift)', function(done) {
@@ -200,16 +199,71 @@ describe("storage", function() {
 
       const _filesToUploadSwift = [];
 
-      _filesToUploadSwift.push({ key: `1-file.txt` })
+      _filesToUploadSwift.push({ key: `1-file.txt` });
 
       storage.syncFiles([], [], _filesToUploadSwift, [], { mode: helper.MODES.BI }, function(err) {
         assert.strictEqual(err, undefined);
         assert.strictEqual(nockS3Download.pendingMocks().length, 0);
         assert.strictEqual(nockSwiftUpload.pendingMocks().length, 0);
         done();
-      })
+      });
     });
-  })
+
+    it('should return an error if a file transfer fails after retries (the caller must not save the cache)', function(done) {
+      /** Download from the target (S3) fails on the first try and on the retry */
+      const nockS3Download = nock(urlS3)
+        .get('/invoices/missing-file.txt')
+        .times(2)
+        .reply(404);
+
+      storage.syncFiles([], [], [{ key: 'missing-file.txt' }], [], { mode: helper.MODES.BI, retry: 1 }, function(err) {
+        assert.strictEqual(err instanceof Error, true);
+        assert.strictEqual(err.toString().includes('Synchronisation errors'), true);
+        assert.strictEqual(err.toString().includes('upload-from-target-to-source'), true);
+        assert.strictEqual(err.toString().includes('1 operation(s) failed'), true);
+        assert.strictEqual(nockS3Download.pendingMocks().length, 0);
+        done();
+      });
+    });
+
+    it('should bulkDeletes objects on the source storage (S3) (delete-files-source queue)', function(done) {
+      const nockAuthS3GRA = nock(urlS3)
+        .defaultReplyHeaders({ 'content-type': 'application/xml' })
+        .get('/')
+        .reply(200, () => {
+          return "<?xml version=\"1.0\" encoding=\"UTF-8\"?><ListAllMyBucketsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Owner><ID>89123456:user-feiowjfOEIJW</ID><DisplayName>12345678:user-feiowjfOEIJW</DisplayName></Owner><Buckets><Bucket><Name>invoices</Name><CreationDate>2023-02-27T11:46:24.000Z</CreationDate></Bucket></Buckets></ListAllMyBucketsResult>";
+        });
+
+      const nockBulkDeleteSourceS3 = nock(urlS3)
+        .post('/invoices/')
+        .query((actualQueryObject) => {
+          assert.strictEqual(actualQueryObject.delete !== undefined, true);
+          return true;
+        })
+        .reply(200, (uri, body) => {
+          assert.strictEqual(body, "<Delete><Object><Key>old1.txt</Key></Object><Object><Key>old2.txt</Key></Object><Quiet>false</Quiet></Delete>");
+          return '';
+        });
+
+      /** Connect an S3-S3 configuration: the source must be an S3 storage to test the S3 bulk delete */
+      helper.loadConfig(path.join(__dirname, 'config.test-s3-s3.json'), function(err, config) {
+        assert.strictEqual(err, null);
+        storage.connection(config, 'source', function(err) {
+          assert.strictEqual(err, undefined);
+          const _filesToDeleteSource = [
+            { key: 'old1.txt' },
+            { key: 'old2.txt' }
+          ];
+          storage.syncFiles([], [], [], _filesToDeleteSource, { mode: helper.MODES.BI }, function(err) {
+            assert.strictEqual(err, undefined);
+            assert.strictEqual(nockAuthS3GRA.pendingMocks().length, 0);
+            assert.strictEqual(nockBulkDeleteSourceS3.pendingMocks().length, 0);
+            done();
+          });
+        });
+      });
+    });
+  });
 
   describe('fetchListFiles', function() {
 
@@ -240,10 +294,10 @@ describe("storage", function() {
               assert.strictEqual(nockAuthS3SBG.pendingMocks().length, 0);
               assert.strictEqual(nockAuthS3GRA.pendingMocks().length, 0);
               done();
-            })
-          })
-        })
-      })
+            });
+          });
+        });
+      });
 
       it('should return the list of files from S3/S3 as Maps (paginate automatically) and should removes quotes from etag', function(done) {
 
@@ -296,9 +350,9 @@ describe("storage", function() {
             }
           }
           done();
-        })
-      })
-    })
+        });
+      });
+    });
 
     describe('Source: SWIFT / Target: SWIFT', function() {
       
@@ -322,10 +376,10 @@ describe("storage", function() {
               assert.strictEqual(err, undefined);
               assert.strictEqual(nockAuthSwiftSBG.pendingMocks().length, 0);
               done();
-            })
-          })
-        })
-      })
+            });
+          });
+        });
+      });
 
       it('should return the list of files from SWIFT/SWIFT (paginate automatically)', function(done) {
         
@@ -340,7 +394,7 @@ describe("storage", function() {
           .query({ 'limit' : '15', 'marker': 'swift-4-608cdb' })
           .reply(200, () => {
             return fs.readFileSync(path.join(__dirname, 'assets', 'listFiles.swift.paginate.json'));
-          })
+          });
 
         const nockListFilesSwiftSBG = nock(urlSwiftSBG)
           .defaultReplyHeaders({ 'content-type': 'application/json' })
@@ -348,7 +402,7 @@ describe("storage", function() {
           .query({ 'limit' : '15' })
           .reply(200, () => {
             return fs.readFileSync(path.join(__dirname, 'assets', 'listFiles.swift.paginate.json'));
-          })
+          });
 
         storage.fetchListFiles(files, { swift: { queries: { limit: 15 } } }, function(err) {
           assert.strictEqual(err, undefined);
@@ -371,8 +425,8 @@ describe("storage", function() {
           }
           done();
         });
-      })
-    })
+      });
+    });
 
     describe('Source: S3 / Target: SWIFT', function() {
       beforeEach(function (done) {
@@ -397,10 +451,10 @@ describe("storage", function() {
               assert.strictEqual(nockAuthSwift.pendingMocks().length, 0);
               assert.strictEqual(nockAuthS3.pendingMocks().length, 0);
               done();
-            })
-          })
-        })
-      })
+            });
+          });
+        });
+      });
       it('should return the list of files from S3/SWIFT as Maps and should paginate automatically', function(done) {
         const nockListFilesS3 = nock(urlS3)
           .defaultReplyHeaders({ 'content-type': 'application/xml' })
@@ -427,7 +481,7 @@ describe("storage", function() {
           .query({ 'limit' : '15', 'marker': 'swift-4-608cdb' })
           .reply(200, () => {
             return fs.readFileSync(path.join(__dirname, 'assets', 'listFiles.swift.paginate.json'));
-          })
+          });
 
         storage.fetchListFiles(files, { swift: { queries: { limit: 15 } } }, function(err) {
           assert.strictEqual(err, undefined);
@@ -467,8 +521,8 @@ describe("storage", function() {
             assert.strictEqual(value?.name, undefined);
           }
           done();
-        })
-      })
+        });
+      });
     });
 
     describe('Source: SWIFT / Target: S3', function() {
@@ -588,7 +642,7 @@ describe("storage", function() {
           assert.strictEqual(files.cache.size, 0);
           done();
         });
-      })
+      });
 
       it('should return the list of files from Swift/S3 as Maps and should paginate automatically', function(done) {
 
@@ -617,7 +671,7 @@ describe("storage", function() {
           .query({ 'limit' : '15', 'marker': 'swift-4-608cdb' })
           .reply(200, () => {
             return fs.readFileSync(path.join(__dirname, 'assets', 'listFiles.swift.paginate.json'));
-          })
+          });
 
         storage.fetchListFiles(files, { swift: { queries: { limit: 15 } } }, function(err) {
           assert.strictEqual(err, undefined);
@@ -626,11 +680,11 @@ describe("storage", function() {
           assert.strictEqual(files.target.size, 10);
           assert.strictEqual(files.source.size, 23);
           done();
-        })
-      })
-    })
+        });
+      });
+    });
 
-  })
+  });
 
 });
 
@@ -640,13 +694,13 @@ describe('convertHeaders', function() {
     const swiftHeaders = {
       'x-object-meta-name': 'custom name',
       'x-object-meta-custom-2': 'custom attribute not supported',
-    }
+    };
     const _s3Headers = {
       'x-amz-meta-name': 'custom%20name',
       'x-amz-meta-custom-2': 'custom%20attribute%20not%20supported',
-    }
-    assert.strictEqual(JSON.stringify(storage.convertHeaders(swiftHeaders, 'swift', 's3')), JSON.stringify(_s3Headers))
-  })
+    };
+    assert.strictEqual(JSON.stringify(storage.convertHeaders(swiftHeaders, 'swift', 's3')), JSON.stringify(_s3Headers));
+  });
 
   it('should convert swift headers to s3 headers THEN should convert s3 headers to swift', function () {
     const swiftHeaders = {
@@ -663,55 +717,55 @@ describe('convertHeaders', function() {
       date: 'Wed, 03 May 2023 07:38:07 GMT',
       'x-iplb-request-id': '25A903A8:1DC8_5762BBC9:01BB_64520F5E_267D4F42:133BB',
       'x-iplb-instance': '42085'
-    }
+    };
     const _s3Headers = {
       'x-amz-meta-name': 'R%C3%83%C2%A9capitulatif%20des%20quantit%C3%83%C2%A9s%20sa',
       'x-amz-meta-desc': 'R%C3%83%C2%A9capitulatif%20des%20quantit%C3%83%C2%A9s%20saisies%20par%20%C3%83%C2%A9l%C3%83%C2%A9ment%20de%20repas%20dans%20chaque%20trame%20de%20menu%20par%20site',
       'content-type': 'application/vnd.oasis.opendocument.spreadsheet'
-    }
+    };
     const _expectedSwiftHeader = {
       "x-object-meta-name":"R%C3%83%C2%A9capitulatif%20des%20quantit%C3%83%C2%A9s%20sa",
       "x-object-meta-desc":"R%C3%83%C2%A9capitulatif%20des%20quantit%C3%83%C2%A9s%20saisies%20par%20%C3%83%C2%A9l%C3%83%C2%A9ment%20de%20repas%20dans%20chaque%20trame%20de%20menu%20par%20site",
       "content-type":"application/vnd.oasis.opendocument.spreadsheet"
-    }
-    assert.strictEqual(JSON.stringify(storage.convertHeaders(swiftHeaders, 'swift', 's3')), JSON.stringify(_s3Headers))
-    assert.strictEqual(JSON.stringify(storage.convertHeaders(_s3Headers, 's3', 'swift')), JSON.stringify(_expectedSwiftHeader))
-  })
+    };
+    assert.strictEqual(JSON.stringify(storage.convertHeaders(swiftHeaders, 'swift', 's3')), JSON.stringify(_s3Headers));
+    assert.strictEqual(JSON.stringify(storage.convertHeaders(_s3Headers, 's3', 'swift')), JSON.stringify(_expectedSwiftHeader));
+  });
 
   it('should not convert s3 to s3 headers', function(done) {
     const _s3Headers = {
       'x-amz-meta-name': 'R%C3%83%C2%A9capitulatif%20des%20quantit%C3%83%C2%A9s%20sa',
       'x-amz-meta-desc': 'R%C3%83%C2%A9capitulatif%20des%20quantit%C3%83%C2%A9s%20saisies%20par%20%C3%83%C2%A9l%C3%83%C2%A9ment%20de%20repas%20dans%20chaque%20trame%20de%20menu%20par%20site',
       'content-type': 'application/vnd.oasis.opendocument.spreadsheet'
-    }
-    assert.strictEqual(JSON.stringify(storage.convertHeaders(_s3Headers, 's3', 's3')), JSON.stringify(_s3Headers))
-    done()
-  })
+    };
+    assert.strictEqual(JSON.stringify(storage.convertHeaders(_s3Headers, 's3', 's3')), JSON.stringify(_s3Headers));
+    done();
+  });
 
   it('should not convert swift to swift headers', function(done) {
     const _swiftHeaders = {
       "x-object-meta-name":"R%C3%83%C2%A9capitulatif%20des%20quantit%C3%83%C2%A9s%20sa",
       "x-object-meta-desc":"R%C3%83%C2%A9capitulatif%20des%20quantit%C3%83%C2%A9s%20saisies%20par%20%C3%83%C2%A9l%C3%83%C2%A9ment%20de%20repas%20dans%20chaque%20trame%20de%20menu%20par%20site",
       "content-type":"application/vnd.oasis.opendocument.spreadsheet"
-    }
-    assert.strictEqual(JSON.stringify(storage.convertHeaders(_swiftHeaders, 'swift', 'swift')), JSON.stringify(_swiftHeaders))
-    done()
+    };
+    assert.strictEqual(JSON.stringify(storage.convertHeaders(_swiftHeaders, 'swift', 'swift')), JSON.stringify(_swiftHeaders));
+    done();
   });
 
   it('should not throw an error if the encoded metadata is not correct', function (done) {
     const _s3Headers = {
       'x-amz-meta-name': 'R%C3%83%C2%A9capitulatif%20des%20quantit%C',
-    }
+    };
     const _swiftHeaders = {
       'x-object-meta-name': 'R%C3%83%C2%A9capitulatif%20des%20quantit%C',
-    }
-    assert.strictEqual(JSON.stringify(storage.convertHeaders(_s3Headers, 's3', 'swift')), JSON.stringify(_swiftHeaders))
+    };
+    assert.strictEqual(JSON.stringify(storage.convertHeaders(_s3Headers, 's3', 'swift')), JSON.stringify(_swiftHeaders));
     done();
-  })
+  });
 
-})
+});
 
-let connectionResultSuccessV3 = {
+const connectionResultSuccessV3 = {
   "token": {
     "catalog": [
       {
@@ -730,9 +784,9 @@ let connectionResultSuccessV3 = {
       }
     ]
   }
-}
+};
 
-let connectionResultSuccessV3SBG = {
+const connectionResultSuccessV3SBG = {
   "token": {
     "catalog": [
       {
@@ -751,4 +805,4 @@ let connectionResultSuccessV3SBG = {
       }
     ]
   }
-}
+};
