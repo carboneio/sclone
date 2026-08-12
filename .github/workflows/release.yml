@@ -53,9 +53,14 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "$GITHUB_REF_NAME" sclone-*-linux sclone-*-macos \
-            --title "$GITHUB_REF_NAME" \
-            --generate-notes
+          # Idempotent: a re-run (or a re-pushed tag) uploads the binaries to the existing release
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" sclone-*-linux sclone-*-macos --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" sclone-*-linux sclone-*-macos \
+              --title "$GITHUB_REF_NAME" \
+              --generate-notes
+          fi
 
   publish-npm:
     name: Publish to npm
