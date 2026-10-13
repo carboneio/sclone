@@ -2,6 +2,9 @@
 
 All notable changes to this project will be documented in this file. This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+- Fixed lost error files and wrong exit code on failure: the process was killed with `process.exit()` before cqueue finished writing the error file of the last retry into `logs`, and it exited with code `0`. It now exits with code `1` once all files are written.
+
 ## 1.2.0
 - Released the 2026/08/12
 - ⚠️ Node.js 20 or higher is now required (`node-cron` 4 and `tiny-storage-client` 3.5 dropped older Node versions).
