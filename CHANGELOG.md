@@ -10,6 +10,14 @@ All notable changes to this project will be documented in this file. This projec
 - Fixed `integrityCheck` with S3 multipart files: the MD5 of the downloaded content was compared to the multipart etag, so these files always failed with "Integrity check error" and were never synchronised. The check is now skipped for multipart etags (the upload is still verified by the storage).
 - Fixed the `integrityCheck` option being kept enabled once a storage was connected with it, even when a later connection disabled it.
 
+- ⚠️ Fixed incomplete listings read as complete ones. With `"delete": true`, every file missing from the listing of a storage was deleted from the other storage. The listing now fails, and nothing is synchronised, when:
+  - an S3 page has no `IsTruncated`: the end of the listing was assumed, the next pages were ignored,
+  - the number of files of an S3 page differs from its `KeyCount` (body cut, or not parsed correctly),
+  - an S3 page is truncated but does not list any new file: the listing stopped with a crash, or looped forever on the same page,
+  - a SWIFT listing is not a JSON list (HTML error page returned with a status 200, unexpected status): it crashed the process,
+  - a listed file has no key, no etag/hash, or an invalid modification date: it crashed the process.
+  A SWIFT listing with the status `204` is read as an empty container.
+
 ## 1.2.0
 - Released the 2026/08/12
 - ⚠️ Node.js 20 or higher is now required (`node-cron` 4 and `tiny-storage-client` 3.5 dropped older Node versions).

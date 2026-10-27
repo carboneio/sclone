@@ -402,6 +402,83 @@ describe("storage", function() {
           done();
         });
       });
+
+      /**
+       * An incomplete listing read as complete makes files disappear: with "delete", they are deleted
+       * from the other storage. The listing must fail instead.
+       */
+      describe('Invalid S3 listing', function() {
+        const _s3Page = (keys, { isTruncated = 'false', keyCount = keys.length, etag = '"7ad22b1297611d62ef4a4704c97afa6b"' } = {}) => {
+          return '<?xml version="1.0" encoding="UTF-8"?><ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Name>invoices</Name><Prefix></Prefix>'
+            + (keyCount === null ? '' : `<KeyCount>${keyCount}</KeyCount>`) + '<MaxKeys>1000</MaxKeys>'
+            + (isTruncated === null ? '' : `<IsTruncated>${isTruncated}</IsTruncated>`)
+            + keys.map((key) => `<Contents><Key>${key}</Key><LastModified>2023-03-07T17:03:54.000Z</LastModified>${etag === null ? '' : `<ETag>${etag}</ETag>`}<Size>61396</Size><StorageClass>STANDARD</StorageClass></Contents>`).join('')
+            + '</ListBucketResult>';
+        };
+
+        /** The target is valid, the source returns the pages given as arguments (twice: the listing is retried once) */
+        function mockListings (sourcePages) {
+          const _nockSource = nock(urlS3).defaultReplyHeaders({ 'content-type': 'application/xml' });
+          for (let i = 0; i < 2; i++) {
+            for (const _page of sourcePages) {
+              _nockSource.get('/invoices').query(_page.query).reply(200, _page.body);
+            }
+          }
+          nock(urlS3SBG)
+            .defaultReplyHeaders({ 'content-type': 'application/xml' })
+            .get('/invoices')
+            .query({ 'list-type' : '2' })
+            .reply(200, () => fs.readFileSync(path.join(__dirname, "assets", "listFiles.s3.xml")));
+          return _nockSource;
+        }
+
+        function assertListingError (expectedMessage, done) {
+          storage.fetchListFiles(files, function(err) {
+            assert.strictEqual(typeof err, 'string');
+            assert.strictEqual(err.includes(expectedMessage), true, err);
+            nock.cleanAll();
+            done();
+          });
+        }
+
+        it('should return an error if "IsTruncated" is missing (the page may not be the last one)', function(done) {
+          mockListings([{ query: { 'list-type' : '2' }, body: _s3Page(['file-1.pdf', 'file-2.pdf'], { isTruncated: null }) }]);
+          assertListingError('Invalid listing: "IsTruncated" not found | Bucket: invoices', done);
+        });
+
+        it('should return an error if the number of files read is different from "KeyCount"', function(done) {
+          mockListings([{ query: { 'list-type' : '2' }, body: _s3Page(['file-1.pdf', 'file-2.pdf'], { keyCount: 1000 }) }]);
+          assertListingError('Invalid listing: 2 file(s) read but "KeyCount" is 1000 | Bucket: invoices', done);
+        });
+
+        it('should accept a page without "KeyCount" (optional for some providers)', function(done) {
+          mockListings([{ query: { 'list-type' : '2' }, body: _s3Page(['file-1.pdf', 'file-2.pdf'], { keyCount: null }) }]);
+          storage.fetchListFiles(files, function(err) {
+            assert.strictEqual(err, undefined);
+            assert.strictEqual(files.source.size, 2);
+            nock.cleanAll();
+            done();
+          });
+        });
+
+        it('should return an error if a truncated page does not list any file', function(done) {
+          mockListings([{ query: { 'list-type' : '2' }, body: _s3Page([], { isTruncated: 'true' }) }]);
+          assertListingError('Invalid listing: the page is truncated but does not list any new file | Bucket: invoices', done);
+        });
+
+        it('should return an error if the next page restarts after the same file (infinite loop)', function(done) {
+          mockListings([
+            { query: { 'list-type' : '2' }, body: _s3Page(['file-1.pdf', 'file-2.pdf'], { isTruncated: 'true' }) },
+            { query: { 'list-type' : '2', 'start-after': 'file-2.pdf' }, body: _s3Page(['file-2.pdf'], { isTruncated: 'true' }) }
+          ]);
+          assertListingError('Invalid listing: the page is truncated but does not list any new file | Bucket: invoices', done);
+        });
+
+        it('should return an error if a file has no ETag', function(done) {
+          mockListings([{ query: { 'list-type' : '2' }, body: _s3Page(['file-1.pdf'], { etag: null }) }]);
+          assertListingError('Invalid listing: a file without a valid "ETag" was returned by the source storage', done);
+        });
+      });
     });
 
     describe('Source: SWIFT / Target: SWIFT', function() {
@@ -475,6 +552,66 @@ describe("storage", function() {
             assert.deepStrictEqual(Object.keys(value), ['key', 'md5', 'lastmodified', 'bytes']);
           }
           done();
+        });
+      });
+
+      describe('Invalid SWIFT listing', function() {
+        function mockSourceListing () {
+          nock(urlSwiftSBG)
+            .defaultReplyHeaders({ 'content-type': 'application/json' })
+            .get('/invoices')
+            .query({ 'limit' : '15' })
+            .reply(200, () => fs.readFileSync(path.join(__dirname, 'assets', 'listFiles.swift.paginate.json')));
+        }
+
+        it('should return an error if the listing is not a JSON list (HTML error page with a status 200)', function(done) {
+          mockSourceListing();
+          nock(urlSwift)
+            .defaultReplyHeaders({ 'content-type': 'text/html' })
+            .get('/invoices')
+            .query({ 'limit' : '15' })
+            .times(2)
+            .reply(200, '<html><body>Service Unavailable</body></html>');
+
+          storage.fetchListFiles(files, { swift: { queries: { limit: 15 } } }, function(err) {
+            assert.strictEqual(typeof err, 'string');
+            assert.strictEqual(err.includes('Invalid listing: a JSON list is expected | Status: 200 | Container: invoices'), true, err);
+            nock.cleanAll();
+            done();
+          });
+        });
+
+        it('should return an error if a file has no hash', function(done) {
+          mockSourceListing();
+          nock(urlSwift)
+            .defaultReplyHeaders({ 'content-type': 'application/json' })
+            .get('/invoices')
+            .query({ 'limit' : '15' })
+            .times(2)
+            .reply(200, JSON.stringify([{ name: 'file-1.pdf', bytes: 10, last_modified: '2023-03-07T17:03:54.000000' }]));
+
+          storage.fetchListFiles(files, { swift: { queries: { limit: 15 } } }, function(err) {
+            assert.strictEqual(typeof err, 'string');
+            assert.strictEqual(err.includes('Invalid listing: a file without a valid "hash" was returned by the target storage'), true, err);
+            nock.cleanAll();
+            done();
+          });
+        });
+
+        it('should return an empty list for an empty container (status 204)', function(done) {
+          mockSourceListing();
+          nock(urlSwift)
+            .get('/invoices')
+            .query({ 'limit' : '15' })
+            .reply(204);
+
+          storage.fetchListFiles(files, { swift: { queries: { limit: 15 } } }, function(err) {
+            assert.strictEqual(err, undefined);
+            assert.strictEqual(files.target.size, 0);
+            assert.strictEqual(files.source.size, 8);
+            nock.cleanAll();
+            done();
+          });
         });
       });
     });

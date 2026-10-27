@@ -89,12 +89,26 @@ const listFiles = {
       if (resp?.statusCode !== 200) {
         return callback(new Error(`Status: ${resp?.statusCode} | Body: ${ resp?.body?.error?.code ?? resp?.body?.toString()} | Bucket: ${container}` ));
       }
+      /**
+       * An incomplete page read as a complete one makes files disappear from the listing: with "delete",
+       * they are deleted from the other storage. Every page is checked before being used.
+       */
       const _listResult = resp?.body?.contents ?? [];
+      if (typeof resp?.body?.istruncated !== 'boolean') {
+        return callback(new Error(`Invalid listing: "IsTruncated" not found | Bucket: ${container}`));
+      }
+      if (typeof resp.body.keycount === 'number' && resp.body.keycount !== _listResult.length) {
+        return callback(new Error(`Invalid listing: ${_listResult.length} file(s) read but "KeyCount" is ${resp.body.keycount} | Bucket: ${container}`));
+      }
       for (let i = 0; i < _listResult.length; i++) {
         options.results.push(_listResult[i]);
       }
       if (options.autoPaging === true && resp.body.istruncated === true) {
-        options.queries['start-after'] = _listResult[_listResult.length - 1].key;
+        const _lastKey = _listResult[_listResult.length - 1]?.key;
+        if (_lastKey === undefined || _lastKey === options.queries['start-after']) {
+          return callback(new Error(`Invalid listing: the page is truncated but does not list any new file | Bucket: ${container}`));
+        }
+        options.queries['start-after'] = _lastKey;
         return listFiles[S3](storage, container, options, callback);
       }
       return callback(null, options.results);
@@ -116,7 +130,11 @@ const listFiles = {
       if (err) {
         return callback(err);
       }
-      const _listResult = resp.body;
+      /** 204: empty container. Anything else than a JSON list (error page, HTML, ...) must not be read as files */
+      const _listResult = resp?.statusCode === 204 ? [] : resp?.body;
+      if ((resp?.statusCode !== 200 && resp?.statusCode !== 204) || Array.isArray(_listResult) === false) {
+        return callback(new Error(`Invalid listing: a JSON list is expected | Status: ${resp?.statusCode} | Container: ${container}`));
+      }
       for (let i = 0; i < _listResult.length; i++) {
         options.results.push(_listResult[i]);
       }
@@ -406,6 +424,30 @@ function copyString(str) {
   return typeof str === 'string' ? Buffer.from(str, 'utf8').toString('utf8') : str;
 }
 
+/** Returns the name of the first field required by the sync that is missing or invalid, or null */
+function getInvalidListedField(storageName, object) {
+  const _key = storageName === S3 ? object?.key : object?.name;
+  if (_key === undefined || _key === null || _key === '') {
+    return storageName === S3 ? 'Key' : 'name';
+  }
+  if (storageName === S3) {
+    if (typeof object.etag !== 'string' || object.etag === '') {
+      return 'ETag';
+    }
+    if (Number.isNaN(new Date(object.lastmodified).getTime())) {
+      return 'LastModified';
+    }
+    return null;
+  }
+  if (typeof object.hash !== 'string' || object.hash === '') {
+    return 'hash';
+  }
+  if (typeof object.last_modified !== 'string' || Number.isNaN(new Date(object.last_modified + (object.last_modified.includes('Z') ? '' : 'Z')).getTime())) {
+    return 'last_modified';
+  }
+  return null;
+}
+
 function fetchListFiles(files, options, callback) {
 
   if(!callback) {
@@ -431,6 +473,11 @@ function fetchListFiles(files, options, callback) {
         for (let i = 0; i < results.length; i++) {
           const _object = results[i];
           results[i] = null;
+          const _invalidField = getInvalidListedField(storages[type].name, _object);
+          if (_invalidField !== null) {
+            _listFileError = `Invalid listing: a file without a valid "${_invalidField}" was returned by the ${type} storage | ${JSON.stringify(_object)}`;
+            return next(new Error(_listFileError));
+          }
           const _key = copyString(_object?.key ?? _object?.name);
           let _file = null;
           if (storages[type].name === S3) {
