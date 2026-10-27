@@ -87,6 +87,22 @@ describe("storage", function() {
       });
     });
 
+    it('should bulkDeletes objects on the target (S3) whose keys contain XML special characters', function(done) {
+      const nockBulkDeleteS3 = nock(urlS3)
+        .post('/invoices/')
+        .query((actualQueryObject) => actualQueryObject.delete !== undefined)
+        .reply(200, (uri, body) => {
+          assert.strictEqual(body, "<Delete><Object><Key>R&amp;D &lt;2024&gt;.pdf</Key></Object><Object><Key>l&apos;offre &quot;v2&quot;.pdf</Key></Object><Quiet>false</Quiet></Delete>");
+          return '';
+        });
+
+      storage.syncFiles([], [{ key: 'R&D <2024>.pdf' }, { key: 'l\'offre "v2".pdf' }], [], [], { mode: helper.MODES.BI }, function(err) {
+        assert.strictEqual(err, undefined);
+        assert.strictEqual(nockBulkDeleteS3.pendingMocks().length, 0);
+        done();
+      });
+    });
+
     it('should bulkDeletes objects on the S3 and should split the list into 2 chunk of 1000 objects (more than 1000 objects)', function(done) {
       const nockBulkDeleteS3 = nock(urlS3)
         .post('/invoices/')
@@ -506,6 +522,46 @@ describe("storage", function() {
           assert.deepStrictEqual([...files.source.keys()], ['0001', '12345678901234567890', '1e3', 'true']);
           assert.deepStrictEqual([...files.target.keys()], ['0001', '1e3']);
           assert.strictEqual(files.source.get('0001').key, '0001');
+          assert.strictEqual(_nockSource.pendingMocks().length, 0);
+          assert.strictEqual(_nockTarget.pendingMocks().length, 0);
+          done();
+        });
+      });
+
+      it('should decode the keys and ETags escaped differently by each provider into the same files', function(done) {
+        const _page = (contents) => '<?xml version="1.0" encoding="UTF-8"?><ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Name>invoices</Name>'
+          + `<KeyCount>${contents.length}</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated>`
+          + contents.map(([key, etag]) => `<Contents><Key>${key}</Key><LastModified>2023-03-07T17:03:54.000Z</LastModified><ETag>${etag}</ETag><Size>61396</Size></Contents>`).join('')
+          + '</ListBucketResult>';
+
+        /** AWS style: named entities */
+        const _nockSource = nock(urlS3)
+          .defaultReplyHeaders({ 'content-type': 'application/xml' })
+          .get('/invoices')
+          .query({ 'list-type' : '2' })
+          .reply(200, _page([
+            ['R&amp;D &lt;2024&gt;.pdf', '&quot;7ad22b1297611d62ef4a4704c97afa6b&quot;'],
+            ['l&apos;offre &quot;v2&quot;.pdf', '&quot;7ad22b1297611d62ef4a4704c97afa6b-2&quot;']
+          ]));
+        /** OVH style: character references */
+        const _nockTarget = nock(urlS3SBG)
+          .defaultReplyHeaders({ 'content-type': 'application/xml' })
+          .get('/invoices')
+          .query({ 'list-type' : '2' })
+          .reply(200, _page([
+            ['R&amp;D &lt;2024&gt;.pdf', '&#34;7ad22b1297611d62ef4a4704c97afa6b&#34;'],
+            ['l&#39;offre &#34;v2&#34;.pdf', '&#34;7ad22b1297611d62ef4a4704c97afa6b-2&#34;']
+          ]));
+
+        storage.fetchListFiles(files, function(err) {
+          assert.strictEqual(err, undefined);
+          const _expectedFiles = [
+            ['R&D <2024>.pdf', '7ad22b1297611d62ef4a4704c97afa6b'],
+            ['l\'offre "v2".pdf', '7ad22b1297611d62ef4a4704c97afa6b-2']
+          ];
+          for (const _files of [files.source, files.target]) {
+            assert.deepStrictEqual([..._files.values()].map((file) => [file.key, file.md5]), _expectedFiles);
+          }
           assert.strictEqual(_nockSource.pendingMocks().length, 0);
           assert.strictEqual(_nockTarget.pendingMocks().length, 0);
           done();

@@ -484,7 +484,7 @@ function fetchListFiles(files, options, callback) {
           if (storages[type].name === S3) {
             _file = {
               key         : _key,
-              md5         : copyString(_object.etag.replaceAll("\"", "").replaceAll("&#34;", "")),
+              md5         : copyString(_object.etag.replaceAll("\"", "")),
               lastmodified: new Date(new Date(_object.lastmodified).toUTCString()).getTime(),
               bytes       : _object.size
             };

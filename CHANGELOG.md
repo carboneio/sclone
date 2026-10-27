@@ -24,6 +24,12 @@ All notable changes to this project will be documented in this file. This projec
   - when such a key was the last one of a page, the next page started after the converted key: files were skipped or listed twice.
   A listed key that is not a string now makes the listing fail.
 
+- Fixed S3 keys and ETags containing XML entities, by updating `tiny-storage-client` (commit `dca5d47` until 3.6.0 is published). They were not decoded: `R&D.pdf` was listed as `R&amp;D.pdf`, `l'offre.pdf` as `l&#39;offre.pdf` by OVH, and the AWS ETags as `&quot;…&quot;`. Consequences:
+  - an S3 source file with such a key could not be downloaded (404): the synchronisation failed on every run,
+  - with a SWIFT source and an S3 target, the file was never found on the target: it was uploaded again on every run. With `"delete": true`, the encoded key was also deleted from the target, and S3 read it as the real file: on every run the file was deleted from the target, then uploaded again,
+  - a key containing a `&` or a `<` made the whole bulk deletion of 1000 files fail with `MalformedXML`,
+  - an AWS ETag never matched the MD5 of the other storage, and a multipart ETag was not detected: the files were uploaded again on every run.
+
 ## 1.2.0
 - Released the 2026/08/12
 - ⚠️ Node.js 20 or higher is now required (`node-cron` 4 and `tiny-storage-client` 3.5 dropped older Node versions).
