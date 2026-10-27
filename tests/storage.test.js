@@ -479,6 +479,38 @@ describe("storage", function() {
           assertListingError('Invalid listing: a file without a valid "ETag" was returned by the source storage', done);
         });
       });
+
+      it('should keep the S3 keys as written, even if they look like numbers or booleans', function(done) {
+        const _page = (keys, isTruncated) => '<?xml version="1.0" encoding="UTF-8"?><ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Name>invoices</Name>'
+          + `<KeyCount>${keys.length}</KeyCount><MaxKeys>2</MaxKeys><IsTruncated>${isTruncated}</IsTruncated>`
+          + keys.map((key) => `<Contents><Key>${key}</Key><LastModified>2023-03-07T17:03:54.000Z</LastModified><ETag>"7ad22b1297611d62ef4a4704c97afa6b"</ETag><Size>61396</Size></Contents>`).join('')
+          + '</ListBucketResult>';
+
+        const _nockSource = nock(urlS3)
+          .defaultReplyHeaders({ 'content-type': 'application/xml' })
+          .get('/invoices')
+          .query({ 'list-type' : '2' })
+          .reply(200, _page(['0001', '12345678901234567890'], 'true'))
+          .get('/invoices')
+          /** The next page must start after the exact key, not after "12345678901234567000" */
+          .query({ 'list-type' : '2', 'start-after': '12345678901234567890' })
+          .reply(200, _page(['1e3', 'true'], 'false'));
+        const _nockTarget = nock(urlS3SBG)
+          .defaultReplyHeaders({ 'content-type': 'application/xml' })
+          .get('/invoices')
+          .query({ 'list-type' : '2' })
+          .reply(200, _page(['0001', '1e3'], 'false'));
+
+        storage.fetchListFiles(files, function(err) {
+          assert.strictEqual(err, undefined);
+          assert.deepStrictEqual([...files.source.keys()], ['0001', '12345678901234567890', '1e3', 'true']);
+          assert.deepStrictEqual([...files.target.keys()], ['0001', '1e3']);
+          assert.strictEqual(files.source.get('0001').key, '0001');
+          assert.strictEqual(_nockSource.pendingMocks().length, 0);
+          assert.strictEqual(_nockTarget.pendingMocks().length, 0);
+          done();
+        });
+      });
     });
 
     describe('Source: SWIFT / Target: SWIFT', function() {
@@ -593,6 +625,23 @@ describe("storage", function() {
           storage.fetchListFiles(files, { swift: { queries: { limit: 15 } } }, function(err) {
             assert.strictEqual(typeof err, 'string');
             assert.strictEqual(err.includes('Invalid listing: a file without a valid "hash" was returned by the target storage'), true, err);
+            nock.cleanAll();
+            done();
+          });
+        });
+
+        it('should return an error if a file name is not a string', function(done) {
+          mockSourceListing();
+          nock(urlSwift)
+            .defaultReplyHeaders({ 'content-type': 'application/json' })
+            .get('/invoices')
+            .query({ 'limit' : '15' })
+            .times(2)
+            .reply(200, JSON.stringify([{ name: 1, hash: '7ad22b1297611d62ef4a4704c97afa6b', bytes: 10, last_modified: '2023-03-07T17:03:54.000000' }]));
+
+          storage.fetchListFiles(files, { swift: { queries: { limit: 15 } } }, function(err) {
+            assert.strictEqual(typeof err, 'string');
+            assert.strictEqual(err.includes('Invalid listing: a file without a valid "name" was returned by the target storage'), true, err);
             nock.cleanAll();
             done();
           });

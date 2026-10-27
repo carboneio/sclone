@@ -18,6 +18,12 @@ All notable changes to this project will be documented in this file. This projec
   - a listed file has no key, no etag/hash, or an invalid modification date: it crashed the process.
   A SWIFT listing with the status `204` is read as an empty container.
 
+- Fixed S3 keys looking like numbers or booleans, by updating `tiny-storage-client` (commit `27dd905` until 3.6.0 is published). The XML parser converted them: `0001` became `1`, `1e3` became `1000`, `true` a boolean, `12345678901234567890` became `12345678901234567000`. Consequences:
+  - the file could not be downloaded or deleted with the converted key, the synchronisation failed on every run, or uploaded it again on every run,
+  - different keys such as `1`, `01` and `1.0` were read as the same file, only one of them was synchronised,
+  - when such a key was the last one of a page, the next page started after the converted key: files were skipped or listed twice.
+  A listed key that is not a string now makes the listing fail.
+
 ## 1.2.0
 - Released the 2026/08/12
 - ⚠️ Node.js 20 or higher is now required (`node-cron` 4 and `tiny-storage-client` 3.5 dropped older Node versions).

@@ -427,7 +427,8 @@ function copyString(str) {
 /** Returns the name of the first field required by the sync that is missing or invalid, or null */
 function getInvalidListedField(storageName, object) {
   const _key = storageName === S3 ? object?.key : object?.name;
-  if (_key === undefined || _key === null || _key === '') {
+  /** A key converted to a number or a boolean ("0001" read as 1) no longer designates the file */
+  if (typeof _key !== 'string' || _key === '') {
     return storageName === S3 ? 'Key' : 'name';
   }
   if (storageName === S3) {
