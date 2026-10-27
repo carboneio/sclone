@@ -91,7 +91,9 @@ const listFiles = {
         return callback(new Error(`Status: ${resp?.statusCode} | Body: ${ resp?.body?.error?.code ?? resp?.body?.toString()} | Bucket: ${container}` ));
       }
       const _listResult = resp?.body?.contents ?? [];
-      options.results = [...options.results, ..._listResult];
+      for (let i = 0; i < _listResult.length; i++) {
+        options.results.push(_listResult[i]);
+      }
       if (options.autoPaging === true && resp.body.istruncated === true) {
         options.queries['start-after'] = _listResult[_listResult.length - 1].key;
         return listFiles[S3](storage, container, options, callback);
@@ -116,7 +118,9 @@ const listFiles = {
         return callback(err);
       }
       const _listResult = resp.body;
-      options.results = [...options.results, ..._listResult];
+      for (let i = 0; i < _listResult.length; i++) {
+        options.results.push(_listResult[i]);
+      }
       if (options.autoPaging === true && _listResult.length === options.queries.limit) {
         options.queries.marker = _listResult[_listResult.length - 1].name;
         return listFiles[SWIFT](storage, container, options, callback);
@@ -397,6 +401,11 @@ function getMD5(data, digest, quotes) {
   }
 }
 
+/** Returns an independent copy of the string, which no longer references the string it was sliced from */
+function copyString(str) {
+  return typeof str === 'string' ? Buffer.from(str, 'utf8').toString('utf8') : str;
+}
+
 function fetchListFiles(files, options, callback) {
 
   if(!callback) {
@@ -414,32 +423,34 @@ function fetchListFiles(files, options, callback) {
           return next(err);
         }
 
+        /**
+         * Each listed file is copied into a new object holding only the fields used by the sync.
+         * With S3, strings parsed by xmlToJson are slices of the XML page: kept as is, every page
+         * listed would stay in memory for the whole synchronisation.
+         */
         for (let i = 0; i < results.length; i++) {
           const _object = results[i];
-          if (!_object?.key && _object?.name) {
-            _object.key = _object.name;
-          }
-          /** Get md5 and remove unused informations */
+          results[i] = null;
+          const _key = copyString(_object?.key ?? _object?.name);
+          let _file = null;
           if (storages[type].name === S3) {
-            _object.md5 = _object.etag.replaceAll("\"", "").replaceAll("&#34;", "");
-            _object.lastmodified = new Date(new Date(_object.lastmodified).toUTCString()).getTime();
-            _object.bytes = _object.size;
-            delete _object.etag;
-            delete _object.storageclass;
-            delete _object.size;
+            _file = {
+              key         : _key,
+              md5         : copyString(_object.etag.replaceAll("\"", "").replaceAll("&#34;", "")),
+              lastmodified: new Date(new Date(_object.lastmodified).toUTCString()).getTime(),
+              bytes       : _object.size
+            };
           }
           if (storages[type].name === SWIFT) {
-            if (_object.last_modified.includes('Z') === false) {
-              _object.last_modified += 'Z';
-            }
-            _object.md5 = _object.hash;
-            _object.lastmodified = new Date(new Date(_object.last_modified).toUTCString()).getTime();
-            delete _object.hash;
-            delete _object.content_type;
-            delete _object.last_modified;
-            delete _object.name;
+            const _lastModified = _object.last_modified.includes('Z') === false ? _object.last_modified + 'Z' : _object.last_modified;
+            _file = {
+              key         : _key,
+              md5         : _object.hash,
+              lastmodified: new Date(new Date(_lastModified).toUTCString()).getTime(),
+              bytes       : _object.bytes
+            };
           }
-          files[type].set(_object.key, _object);
+          files[type].set(_key, _file);
         }
         return next();
       });

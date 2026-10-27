@@ -341,6 +341,8 @@ describe("storage", function() {
             assert.strictEqual(value?.etag, undefined);
             assert.strictEqual(value?.storageclass, undefined);
             assert.strictEqual(value?.size, undefined);
+            /** Only the fields used by the sync are kept in memory */
+            assert.deepStrictEqual(Object.keys(value), ['key', 'md5', 'lastmodified', 'bytes']);
             /** Check ETAG value, should not include \" or &#34; */
             if (value.key === "s3-3-document-5.pdf") {
               assert.strictEqual(value.md5, "dd58d4bd19ea3e5277844c066ba57b39");
@@ -422,6 +424,7 @@ describe("storage", function() {
             assert.strictEqual(value?.last_modified, undefined);
             assert.strictEqual(value?.hash, undefined);
             assert.strictEqual(value?.name, undefined);
+            assert.deepStrictEqual(Object.keys(value), ['key', 'md5', 'lastmodified', 'bytes']);
           }
           done();
         });
