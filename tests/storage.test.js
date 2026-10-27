@@ -209,6 +209,54 @@ describe("storage", function() {
       });
     });
 
+    describe('integrityCheck', function() {
+      const _fileContent = Buffer.from('Hello1234');
+      const _fileMD5 = '43d5d2b9e7e4c4e1c1fbb7a2bc4a7c4a';
+
+      beforeEach(function(done) {
+        const nockAuthS3 = nock(urlS3)
+          .defaultReplyHeaders({ 'content-type': 'application/xml' })
+          .get('/')
+          .reply(200, "<?xml version=\"1.0\" encoding=\"UTF-8\"?><ListAllMyBucketsResult><Buckets><Bucket><Name>invoices</Name></Bucket></Buckets></ListAllMyBucketsResult>");
+        storage.connection({ ..._config, integrityCheck: true }, 'target', function(err) {
+          assert.strictEqual(err, undefined);
+          assert.strictEqual(nockAuthS3.pendingMocks().length, 0);
+          done();
+        });
+      });
+
+      it('should transfer an S3 file with a multipart etag: it is not the MD5 of the content and cannot be checked', function(done) {
+        const nockS3Download = nock(urlS3)
+          .defaultReplyHeaders({ etag: '"b62e2a390d253298e9f061541ec39fc6-2"' })
+          .get('/invoices/multipart.pdf')
+          .reply(200, () => _fileContent);
+        const nockSwiftUpload = nock(urlSwift)
+          .put('/invoices/multipart.pdf')
+          .reply(201, '');
+
+        storage.syncFiles([], [], [{ key: 'multipart.pdf' }], [], { mode: helper.MODES.BI }, function(err) {
+          assert.strictEqual(err, undefined);
+          assert.strictEqual(nockS3Download.pendingMocks().length, 0);
+          assert.strictEqual(nockSwiftUpload.pendingMocks().length, 0);
+          done();
+        });
+      });
+
+      it('should NOT transfer an S3 file if its MD5 etag does not match the content', function(done) {
+        const nockS3Download = nock(urlS3)
+          .defaultReplyHeaders({ etag: `"${_fileMD5}"` })
+          .get('/invoices/corrupted.pdf')
+          .reply(200, () => _fileContent);
+
+        storage.syncFiles([], [], [{ key: 'corrupted.pdf' }], [], { mode: helper.MODES.BI }, function(err) {
+          assert.strictEqual(err instanceof Error, true);
+          assert.strictEqual(err.toString().includes('upload-from-target-to-source | 1 operation(s) failed'), true);
+          assert.strictEqual(nockS3Download.pendingMocks().length, 0);
+          done();
+        });
+      });
+    });
+
     it('should return an error if a file transfer fails after retries (the caller must not save the cache)', function(done) {
       /** Download from the target (S3) fails on the first try and on the retry */
       const nockS3Download = nock(urlS3)

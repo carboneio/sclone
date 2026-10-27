@@ -2,6 +2,7 @@ const storageClient = require("tiny-storage-client");
 const { execQueue } = require('@carboneio/cqueue');
 const crypto = require('crypto');
 const helper = require("./helper");
+const { isMultipartEtag } = require("./logic");
 
 
 const SWIFT = 'swift';
@@ -39,9 +40,7 @@ function connection (config, type, callback) {
   };
   storages[type].setTimeout(240000);
 
-  if (config?.integrityCheck === true) {
-    integrityCheck = true;
-  }
+  integrityCheck = config?.integrityCheck === true;
   if (config?.test === true) {
     logQueueStatus = false;
   }
@@ -170,8 +169,9 @@ const downloadFile = {
       }
       if (integrityCheck === true) {
         const _fileMD5 = getMD5(resp?.body, "hex");
-        /** S3 Check file integrity if "etag" exists */
-        if (resp?.headers?.["etag"] && "\""+_fileMD5+"\"" !== resp?.headers?.["etag"]) {
+        const _etag = resp?.headers?.["etag"];
+        /** S3 Check file integrity if "etag" exists. A multipart etag is not the MD5 of the content: it cannot be checked */
+        if (_etag && isMultipartEtag(_etag.replaceAll("\"", "")) === false && "\""+_fileMD5+"\"" !== _etag) {
           return callback(`S3 downloadFile Integrity check error | file md5 is not valid`);
         }
         /** Remove double quotes */

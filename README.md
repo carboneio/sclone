@@ -178,6 +178,17 @@ For the first synchronisation, even if the `deletion` option is enabled, it won'
 
 For all subsequent synchronisations, Sclone will use the cache as the source of truth of the previous synchronisation to determine new, edited, or deleted files. If the cache is deleted, it will be considered a first synchronisation; it won't delete anything and will create a new cache. If a synchronisation ends with transfer errors, the cache is not updated: the failed files are retried on the next run.
 
+### S3 multipart files
+
+The S3 etag of a file uploaded with a multipart upload is not the MD5 of its content (format `<hash>-<number of parts>`). Sclone copies files with a single upload, so the copy always gets the real MD5, and the two etags never match.
+
+When only one of the two versions has a multipart etag, both modes consider the files identical if they have the same size and the multipart version is not newer than the other one (the copy is always created after the original). Consequences:
+- A multipart version uploaded again after the copy is synchronised, even with the same size.
+- A content change that keeps the exact same size, made on the non-multipart version only, is not detected until one of the files is modified again.
+- When both etags are multipart but different, the content cannot be compared: the file is synchronised.
+
+With `integrityCheck`, the downloaded content of a multipart file cannot be checked against its etag: the check is skipped for these files. The upload is still verified by the storage with the `Content-MD5` header (S3) or the `ETag` header (SWIFT).
+
 ## Development
 
 Requires Node.js 20 or higher.
