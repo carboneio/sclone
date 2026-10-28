@@ -136,6 +136,127 @@ describe("storage", function() {
       });
     });
 
+    describe('Files not deleted', function() {
+      let _consoleOutput = [];
+      let _consoleLog = null;
+
+      beforeEach(function() {
+        _consoleOutput = [];
+        _consoleLog = console.log;
+        console.log = (...args) => _consoleOutput.push(args.join(' '));
+      });
+
+      afterEach(function() {
+        console.log = _consoleLog;
+        nock.cleanAll();
+      });
+
+      /** The message of each failed operation is written by cqueue into the errors file of the queue */
+      const _assertDeleteError = (queueName, expectedMessage, done) => (err) => {
+        console.log = _consoleLog;
+        assert.strictEqual(err instanceof Error, true);
+        assert.strictEqual(err.toString().includes(`${queueName} | 1 operation(s) failed`), true, err.toString());
+        const _errorFile = _consoleOutput.find((line) => line.includes(`[${queueName}] Created errors file: `))?.split('Created errors file: ')[1];
+        assert.strictEqual(typeof _errorFile, 'string', _consoleOutput.join('\n'));
+        const _readErrorFile = (attempt) => {
+          let _errors = null;
+          try {
+            _errors = JSON.parse(fs.readFileSync(_errorFile, 'utf8'));
+          } catch (e) {
+            /** The file is written as a stream: it may not be complete yet */
+            if (attempt < 50) {
+              return setTimeout(() => _readErrorFile(attempt + 1), 10);
+            }
+            throw e;
+          }
+          fs.unlinkSync(_errorFile);
+          assert.strictEqual(_errors.length, 1);
+          assert.strictEqual(_errors[0].message.includes(expectedMessage), true, _errors[0].message);
+          done();
+        };
+        _readErrorFile(0);
+      };
+
+      it('should return an error if S3 does not delete some files (status 200 with errors per file)', function(done) {
+        const nockBulkDeleteS3 = nock(urlS3)
+          .post('/invoices/')
+          .query((actualQueryObject) => actualQueryObject.delete !== undefined)
+          .reply(200, '<?xml version="1.0" encoding="UTF-8"?><DeleteResult><Deleted><Key>file1.txt</Key></Deleted><Error><Key>file2.txt</Key><Code>AccessDenied</Code><Message>Access Denied</Message></Error></DeleteResult>');
+
+        storage.syncFiles([], [{ key: 'file1.txt' }, { key: 'file2.txt' }], [], [], { mode: helper.MODES.BI }, _assertDeleteError('delete-files-target', 'S3 Delete files | 1/2 file(s) not deleted | file2.txt: AccessDenied', () => {
+          assert.strictEqual(nockBulkDeleteS3.pendingMocks().length, 0);
+          done();
+        }));
+      });
+
+      it('should not return an error if S3 deletes all files', function(done) {
+        const nockBulkDeleteS3 = nock(urlS3)
+          .post('/invoices/')
+          .query((actualQueryObject) => actualQueryObject.delete !== undefined)
+          .reply(200, '<?xml version="1.0" encoding="UTF-8"?><DeleteResult><Deleted><Key>file1.txt</Key></Deleted><Deleted><Key>file2.txt</Key></Deleted></DeleteResult>');
+
+        storage.syncFiles([], [{ key: 'file1.txt' }, { key: 'file2.txt' }], [], [], { mode: helper.MODES.BI }, function(err) {
+          assert.strictEqual(err, undefined);
+          assert.strictEqual(nockBulkDeleteS3.pendingMocks().length, 0);
+          done();
+        });
+      });
+
+      it('should list the first 10 files not deleted only', function(done) {
+        const _keys = Array.from({ length: 12 }, (value, i) => `file${i}.txt`);
+        nock(urlS3)
+          .post('/invoices/')
+          .query((actualQueryObject) => actualQueryObject.delete !== undefined)
+          .reply(200, '<?xml version="1.0" encoding="UTF-8"?><DeleteResult>' + _keys.map((key) => `<Error><Key>${key}</Key><Code>AccessDenied</Code></Error>`).join('') + '</DeleteResult>');
+
+        storage.syncFiles([], _keys.map((key) => ({ key })), [], [], { mode: helper.MODES.BI }, _assertDeleteError('delete-files-target', 'file9.txt: AccessDenied, ... (2 more)', done));
+      });
+
+      it('should return an error if the SWIFT bulk delete does not delete some files', function(done) {
+        const nockBulkDeleteSwift = nock(urlSwift)
+          .post('/')
+          .query(true)
+          .reply(200, { 'Number Not Found': 0, 'Response Status': '400 Bad Request', 'Response Body': '', 'Errors': [['/invoices/old2.txt', '403 Forbidden']], 'Number Deleted': 1 });
+
+        storage.syncFiles([], [], [], [{ key: 'old1.txt' }, { key: 'old2.txt' }], { mode: helper.MODES.BI }, _assertDeleteError('delete-files-source', 'Swift Delete files | 1/2 file(s) not deleted | Response Status: 400 Bad Request | /invoices/old2.txt: 403 Forbidden', () => {
+          assert.strictEqual(nockBulkDeleteSwift.pendingMocks().length, 0);
+          done();
+        }));
+      });
+
+      it('should return an error if the SWIFT bulk delete fails (status code)', function(done) {
+        nock(urlSwift)
+          .post('/')
+          .query(true)
+          .reply(403, 'Forbidden');
+
+        storage.syncFiles([], [], [], [{ key: 'old1.txt' }], { mode: helper.MODES.BI }, _assertDeleteError('delete-files-source', 'Swift Delete files | Status code 403', done));
+      });
+
+      it('should return an error if the SWIFT bulk delete response cannot be read', function(done) {
+        nock(urlSwift)
+          .post('/')
+          .query(true)
+          .reply(200, '<html><body>OK</body></html>', { 'content-type': 'text/html' });
+
+        storage.syncFiles([], [], [], [{ key: 'old1.txt' }], { mode: helper.MODES.BI }, _assertDeleteError('delete-files-source', 'Swift Delete files | Unexpected response, the deleted files cannot be checked | <html><body>OK</body></html>', done));
+      });
+
+      it('should not return an error if the SWIFT bulk delete does not find a file (already deleted)', function(done) {
+        const nockBulkDeleteSwift = nock(urlSwift)
+          .post('/', (body) => body === 'invoices/old1.txt\ninvoices/old2.txt\n')
+          .query(true)
+          .reply(200, { 'Number Not Found': 1, 'Response Status': '200 OK', 'Response Body': '', 'Errors': [], 'Number Deleted': 1 });
+
+        storage.syncFiles([], [], [], [{ key: 'old1.txt' }, { key: 'old2.txt' }], { mode: helper.MODES.BI }, function(err) {
+          console.log = _consoleLog;
+          assert.strictEqual(err, undefined);
+          assert.strictEqual(nockBulkDeleteSwift.pendingMocks().length, 0);
+          done();
+        });
+      });
+    });
+
     it('should upload objects on the target storage with headers (S3)', function(done) {
 
       const _fileContent = Buffer.from('Hello1234');

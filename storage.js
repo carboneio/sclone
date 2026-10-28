@@ -198,6 +198,13 @@ const listFiles = {
   }
 };
 
+/** List the first files not deleted, as [[key, reason], ...]: a chunk can hold 1000 files */
+function formatDeleteErrors (errors) {
+  const _max = 10;
+  const _list = errors.slice(0, _max).map((error) => Array.isArray(error) ? error.join(': ') : JSON.stringify(error)).join(', ');
+  return errors.length > _max ? `${_list}, ... (${errors.length - _max} more)` : _list;
+}
+
 const deleteFiles = {
   [S3]: function(storage, bucket, objects, callback) {
     storage.deleteFiles(bucket, objects, function(err, res) {
@@ -207,10 +214,15 @@ const deleteFiles = {
       if (res?.statusCode !== 200) {
         return callback(new Error(`Code ${res?.statusCode} | ${ res?.body?.error?.code ?? res?.body?.toString()}`));
       }
+      /** S3 returns 200 even if files are not deleted (AccessDenied...): the errors are listed per file */
+      const _errors = res?.body?.error ?? [];
+      if (_errors.length > 0) {
+        return callback(new Error(`S3 Delete files | ${_errors.length}/${objects.length} file(s) not deleted | ${formatDeleteErrors(_errors.map((error) => [error?.key, error?.code]))}`));
+      }
       return callback(null, {
         list: objects,
         deleted: res?.body?.deleted?.length,
-        errors: res?.body?.error
+        errors: _errors
       });
     });
   },
@@ -218,6 +230,18 @@ const deleteFiles = {
     storage.deleteFiles(bucket, objects, (err, resp) => {
       if (err) {
         return callback('Swift Delete files | Delete files error returned: ' + err.toString());
+      }
+      if (resp?.statusCode !== 200) {
+        return callback(new Error(`Swift Delete files | Status code ${resp?.statusCode}`));
+      }
+      /** The bulk delete returns 200 even if files are not deleted: the result is in the body. A file not found is not an error */
+      const _responseStatus = resp?.body?.['Response Status'];
+      const _errors = resp?.body?.Errors;
+      if (typeof _responseStatus !== 'string' || Array.isArray(_errors) === false) {
+        return callback(new Error(`Swift Delete files | Unexpected response, the deleted files cannot be checked | ${resp?.body?.toString()?.slice(0, 200)}`));
+      }
+      if (_errors.length > 0 || _responseStatus.startsWith('2') === false) {
+        return callback(new Error(`Swift Delete files | ${_errors.length}/${objects.length} file(s) not deleted | Response Status: ${_responseStatus} | ${formatDeleteErrors(_errors)}`));
       }
       return callback(null, resp.body);
     });
