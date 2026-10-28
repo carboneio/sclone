@@ -58,13 +58,13 @@
   "dependencies": {
     "@carboneio/cqueue": "1.0.0",
     "node-cron": "4.6.0",
-    "tiny-storage-client": "3.5.0"
+    "tiny-storage-client": "github:carboneio/tiny-storage-client#dca5d4744611c3f27ec7e8bcf30aa2caacf55b80"
   },
   "devDependencies": {
     "@yao-pkg/pkg": "6.22.0",
     "eslint": "10.8.1",
     "lorem-ipsum": "3.0.0",
-    "mocha": "11.8.0",
+    "mocha": "12.0.3",
     "nock": "14.0.17",
     "sinon": "22.1.0"
   }

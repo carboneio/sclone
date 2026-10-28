@@ -23,9 +23,13 @@ function loadConfig(filenameOrAbsolutePath, callback) {
   return callback(null, config);
 }
 
+/**
+ * The process is not killed with `process.exit()`: pending asynchronous writes, such as the
+ * error files of the last retry created by cqueue, would be lost.
+ */
 function stop(msg) {
   console.log("🔴 " + msg.toString());
-  return process.exit();
+  process.exitCode = 1;
 }
 
 function arrayToMap(originArray, destinationMap) {

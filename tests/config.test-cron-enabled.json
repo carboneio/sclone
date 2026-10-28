@@ -5,6 +5,8 @@
     "cacheFilename": "listFiles.cache.json",
     "cron": "* * * * * *",
     "integrityCheck": false,
+    "listRetryDelay": 1,
+    "listRetry": 1,
     "source": {
       "name": "s3",
       "accessKeyId": "access-key-id",
