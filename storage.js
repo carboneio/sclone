@@ -203,6 +203,13 @@ const downloadFile = {
       if (err) {
         return callback("Swift downloadFile Error | " + err.toString());
       }
+      /** The body of an error (404, 403, 429...) must not be uploaded as the content of the file */
+      if (resp?.statusCode === 404) {
+        return callback("Swift downloadFile Error 404 | file not found");
+      }
+      if (resp?.statusCode !== 200) {
+        return callback(`Swift downloadFile Error | Status code ${resp?.statusCode}`);
+      }
       /** SWIFT integrity check */
       if (integrityCheck === true) {
         const _fileMD5 = getMD5(resp.body, 'hex');
@@ -234,9 +241,13 @@ const uploadFile = {
     if (integrityCheck === true) {
       headers['ETag'] = getMD5(body);
      }
-    storage.uploadFile(bucket, key, body, { headers: headers }, function (err) {
+    storage.uploadFile(bucket, key, body, { headers: headers }, function (err, resp) {
       if (err) {
         return callback(`Swift upload File | Error on upload: ` + err.toString());
+      }
+      /** A refused upload (422 integrity check, 413, 403, 404 container...) must not be counted as synchronised */
+      if (resp?.statusCode !== 201) {
+        return callback(`Swift upload File | Error on upload: Status code ${resp?.statusCode}`);
       }
       return callback(null);
     });

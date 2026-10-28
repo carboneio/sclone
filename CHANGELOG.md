@@ -30,6 +30,10 @@ All notable changes to this project will be documented in this file. This projec
   - a key containing a `&` or a `<` made the whole bulk deletion of 1000 files fail with `MalformedXML`,
   - an AWS ETag never matched the MD5 of the other storage, and a multipart ETag was not detected: the files were uploaded again on every run.
 
+- ⚠️ Fixed SWIFT downloads and uploads whose HTTP status was not checked. `tiny-storage-client` returns the 4xx responses of SWIFT without any error:
+  - a download error (`404` file deleted after the listing, `403`, `429`, `498` rate limited) was uploaded to the other storage as the content of the file: the error page replaced the file, with the `content-type` of the error. A download must now return `200`,
+  - a refused upload (`422` content different from the `ETag` sent by `integrityCheck`, `413` too large, `403`, `404` container) was counted as synchronised. In `bidirectional` mode, the file was saved in the cache: on the next run, it was read as deleted from the storage where the upload had failed, and with `"delete": true` it was deleted from the other storage, which had the only copy. An upload must now return `201`.
+
 ## 1.2.0
 - Released the 2026/08/12
 - ⚠️ Node.js 20 or higher is now required (`node-cron` 4 and `tiny-storage-client` 3.5 dropped older Node versions).

@@ -225,6 +225,50 @@ describe("storage", function() {
       });
     });
 
+    /** Swift returns the 4xx errors without any error: the error page was uploaded as the content of the file */
+    for (const _status of [404, 403, 429, 498]) {
+      it(`should not upload the body of a Swift download error (status ${_status})`, function(done) {
+        const nockSwiftDownload = nock(urlSwift)
+          .defaultReplyHeaders({ 'content-type': 'text/html; charset=UTF-8' })
+          .get('/invoices/file.pdf')
+          /** rock-req retries a 429 once */
+          .times(_status === 429 ? 2 : 1)
+          .reply(_status, '<html><h1>Error</h1></html>');
+        const nockS3Upload = nock(urlS3)
+          .put('/invoices/file.pdf')
+          .reply(200, '');
+
+        storage.syncFiles([{ key: 'file.pdf' }], [], [], [], { mode: helper.MODES.UNI }, function(err) {
+          assert.strictEqual(err instanceof Error, true);
+          assert.strictEqual(err.toString().includes('upload-from-source-to-target | 1 operation(s) failed'), true, err.toString());
+          assert.strictEqual(nockSwiftDownload.pendingMocks().length, 0);
+          assert.strictEqual(nockS3Upload.pendingMocks().length, 1);
+          nock.cleanAll();
+          done();
+        });
+      });
+    }
+
+    /** A refused upload counted as synchronised is saved in the cache: in bidirectional mode, the next run deletes the file from the other storage */
+    for (const _status of [403, 404, 413, 422]) {
+      it(`should return an error if a Swift upload is refused (status ${_status})`, function(done) {
+        const nockS3Download = nock(urlS3)
+          .get('/invoices/file.pdf')
+          .reply(200, 'Hello1234');
+        const nockSwiftUpload = nock(urlSwift)
+          .put('/invoices/file.pdf')
+          .reply(_status, '<html><h1>Error</h1></html>');
+
+        storage.syncFiles([], [], [{ key: 'file.pdf' }], [], { mode: helper.MODES.BI }, function(err) {
+          assert.strictEqual(err instanceof Error, true);
+          assert.strictEqual(err.toString().includes('upload-from-target-to-source | 1 operation(s) failed'), true, err.toString());
+          assert.strictEqual(nockS3Download.pendingMocks().length, 0);
+          assert.strictEqual(nockSwiftUpload.pendingMocks().length, 0);
+          done();
+        });
+      });
+    }
+
     describe('integrityCheck', function() {
       const _fileContent = Buffer.from('Hello1234');
       const _fileMD5 = '43d5d2b9e7e4c4e1c1fbb7a2bc4a7c4a';
