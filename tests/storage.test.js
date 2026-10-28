@@ -468,6 +468,10 @@ describe("storage", function() {
        * from the other storage. The listing must fail instead.
        */
       describe('Invalid S3 listing', function() {
+        afterEach(function() {
+          nock.cleanAll();
+        });
+
         const _s3Page = (keys, { isTruncated = 'false', keyCount = keys.length, etag = '"7ad22b1297611d62ef4a4704c97afa6b"' } = {}) => {
           return '<?xml version="1.0" encoding="UTF-8"?><ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Name>invoices</Name><Prefix></Prefix>'
             + (keyCount === null ? '' : `<KeyCount>${keyCount}</KeyCount>`) + '<MaxKeys>1000</MaxKeys>'
@@ -476,13 +480,11 @@ describe("storage", function() {
             + '</ListBucketResult>';
         };
 
-        /** The target is valid, the source returns the pages given as arguments (twice: the listing is retried once) */
+        /** The target is valid, the source returns the pages given as arguments (each page is retried on error) */
         function mockListings (sourcePages) {
           const _nockSource = nock(urlS3).defaultReplyHeaders({ 'content-type': 'application/xml' });
-          for (let i = 0; i < 2; i++) {
-            for (const _page of sourcePages) {
-              _nockSource.get('/invoices').query(_page.query).reply(200, _page.body);
-            }
+          for (const _page of sourcePages) {
+            _nockSource.get('/invoices').query(_page.query).reply(200, _page.body).persist();
           }
           nock(urlS3SBG)
             .defaultReplyHeaders({ 'content-type': 'application/xml' })
@@ -532,6 +534,117 @@ describe("storage", function() {
             { query: { 'list-type' : '2', 'start-after': 'file-2.pdf' }, body: _s3Page(['file-2.pdf'], { isTruncated: 'true' }) }
           ]);
           assertListingError('Invalid listing: the page is truncated but does not list any new file | Bucket: invoices', done);
+        });
+
+        it('should request a failed page again, without listing the previous pages again', function(done) {
+          const _requests = { page1: 0, page2: 0 };
+          const _nockSource = nock(urlS3)
+            .defaultReplyHeaders({ 'content-type': 'application/xml' })
+            .get('/invoices')
+            .query({ 'list-type' : '2' })
+            .reply(200, () => {
+              _requests.page1++;
+              return _s3Page(['file-1.pdf', 'file-2.pdf'], { isTruncated: 'true' });
+            })
+            .get('/invoices')
+            .query({ 'list-type' : '2', 'start-after': 'file-2.pdf' })
+            .times(2)
+            .reply(500, () => {
+              _requests.page2++;
+              return '';
+            })
+            .get('/invoices')
+            .query({ 'list-type' : '2', 'start-after': 'file-2.pdf' })
+            .reply(200, () => {
+              _requests.page2++;
+              /** Cut before the end */
+              return _s3Page(['file-3.pdf']).slice(0, 200);
+            })
+            .get('/invoices')
+            .query({ 'list-type' : '2', 'start-after': 'file-2.pdf' })
+            .reply(200, () => {
+              _requests.page2++;
+              return _s3Page(['file-3.pdf']);
+            });
+          mockListings([]);
+
+          storage.fetchListFiles(files, function(err) {
+            assert.strictEqual(err, undefined);
+            assert.deepStrictEqual([...files.source.keys()], ['file-1.pdf', 'file-2.pdf', 'file-3.pdf']);
+            assert.deepStrictEqual(_requests, { page1: 1, page2: 4 });
+            assert.strictEqual(_nockSource.pendingMocks().length, 0);
+            nock.cleanAll();
+            done();
+          });
+        });
+
+        it('should return an error if a page still fails after 5 retries', function(done) {
+          let _requests = 0;
+          nock(urlS3)
+            .get('/invoices')
+            .query({ 'list-type' : '2' })
+            .reply(500, () => {
+              _requests++;
+              return '';
+            })
+            .persist();
+          mockListings([]);
+
+          storage.fetchListFiles(files, function(err) {
+            assert.strictEqual(typeof err, 'string');
+            assert.strictEqual(err.includes('All S3 storages are not available'), true, err);
+            assert.strictEqual(_requests, 6);
+            nock.cleanAll();
+            done();
+          });
+        });
+
+        it('should not request a page again if the error is permanent (access denied, bucket not found)', function(done) {
+          let _requests = 0;
+          nock(urlS3)
+            .defaultReplyHeaders({ 'content-type': 'application/xml' })
+            .get('/invoices')
+            .query({ 'list-type' : '2' })
+            .reply(403, () => {
+              _requests++;
+              return '<?xml version="1.0" encoding="UTF-8"?><Error><Code>AccessDenied</Code><Message>Access Denied</Message></Error>';
+            })
+            .persist();
+          mockListings([]);
+
+          storage.fetchListFiles(files, function(err) {
+            assert.strictEqual(typeof err, 'string');
+            assert.strictEqual(err.includes('Status: 403 | Body: AccessDenied | Bucket: invoices'), true, err);
+            assert.strictEqual(_requests, 1);
+            nock.cleanAll();
+            done();
+          });
+        });
+
+        it('should not modify the queries given as options (the pagination marker must not leak into the next listing)', function(done) {
+          const _options = { s3: { queries: { 'max-keys': 2 } } };
+          const _nockSource = nock(urlS3)
+            .defaultReplyHeaders({ 'content-type': 'application/xml' })
+            .get('/invoices')
+            .query({ 'list-type' : '2', 'max-keys': '2' })
+            .reply(200, _s3Page(['file-1.pdf', 'file-2.pdf'], { isTruncated: 'true' }))
+            .get('/invoices')
+            .query({ 'list-type' : '2', 'max-keys': '2', 'start-after': 'file-2.pdf' })
+            .reply(200, _s3Page(['file-3.pdf']));
+          const _nockTarget = nock(urlS3SBG)
+            .defaultReplyHeaders({ 'content-type': 'application/xml' })
+            .get('/invoices')
+            .query({ 'list-type' : '2', 'max-keys': '2' })
+            .reply(200, _s3Page([]));
+
+          storage.fetchListFiles(files, _options, function(err) {
+            assert.strictEqual(err, undefined);
+            assert.strictEqual(files.source.size, 3);
+            assert.deepStrictEqual(_options, { s3: { queries: { 'max-keys': 2 } } });
+            assert.strictEqual(_nockSource.pendingMocks().length, 0);
+            assert.strictEqual(_nockTarget.pendingMocks().length, 0);
+            done();
+          });
         });
 
         it('should return an error if a file has no ETag', function(done) {
@@ -688,6 +801,10 @@ describe("storage", function() {
       });
 
       describe('Invalid SWIFT listing', function() {
+        afterEach(function() {
+          nock.cleanAll();
+        });
+
         function mockSourceListing () {
           nock(urlSwiftSBG)
             .defaultReplyHeaders({ 'content-type': 'application/json' })
@@ -698,17 +815,42 @@ describe("storage", function() {
 
         it('should return an error if the listing is not a JSON list (HTML error page with a status 200)', function(done) {
           mockSourceListing();
+          let _requests = 0;
           nock(urlSwift)
             .defaultReplyHeaders({ 'content-type': 'text/html' })
             .get('/invoices')
             .query({ 'limit' : '15' })
-            .times(2)
-            .reply(200, '<html><body>Service Unavailable</body></html>');
+            .reply(200, () => {
+              _requests++;
+              return '<html><body>Service Unavailable</body></html>';
+            })
+            .persist();
 
           storage.fetchListFiles(files, { swift: { queries: { limit: 15 } } }, function(err) {
             assert.strictEqual(typeof err, 'string');
             assert.strictEqual(err.includes('Invalid listing: a JSON list is expected | Status: 200 | Container: invoices'), true, err);
+            /** The page is requested again 5 times before failing */
+            assert.strictEqual(_requests, 6);
             nock.cleanAll();
+            done();
+          });
+        });
+
+        it('should request a failed page again (HTML error page with a status 200)', function(done) {
+          mockSourceListing();
+          const _nockTarget = nock(urlSwift)
+            .get('/invoices')
+            .query({ 'limit' : '15' })
+            .reply(200, '<html><body>Service Unavailable</body></html>', { 'content-type': 'text/html' })
+            .get('/invoices')
+            .query({ 'limit' : '15' })
+            .reply(200, () => fs.readFileSync(path.join(__dirname, 'assets', 'listFiles.swift.paginate.json')), { 'content-type': 'application/json' });
+
+          storage.fetchListFiles(files, { swift: { queries: { limit: 15 } } }, function(err) {
+            assert.strictEqual(err, undefined);
+            assert.strictEqual(files.target.size, 8);
+            assert.strictEqual(files.source.size, 8);
+            assert.strictEqual(_nockTarget.pendingMocks().length, 0);
             done();
           });
         });
@@ -719,7 +861,6 @@ describe("storage", function() {
             .defaultReplyHeaders({ 'content-type': 'application/json' })
             .get('/invoices')
             .query({ 'limit' : '15' })
-            .times(2)
             .reply(200, JSON.stringify([{ name: 'file-1.pdf', bytes: 10, last_modified: '2023-03-07T17:03:54.000000' }]));
 
           storage.fetchListFiles(files, { swift: { queries: { limit: 15 } } }, function(err) {
@@ -736,7 +877,6 @@ describe("storage", function() {
             .defaultReplyHeaders({ 'content-type': 'application/json' })
             .get('/invoices')
             .query({ 'limit' : '15' })
-            .times(2)
             .reply(200, JSON.stringify([{ name: 1, hash: '7ad22b1297611d62ef4a4704c97afa6b', bytes: 10, last_modified: '2023-03-07T17:03:54.000000' }]));
 
           storage.fetchListFiles(files, { swift: { queries: { limit: 15 } } }, function(err) {
@@ -898,9 +1038,8 @@ describe("storage", function() {
           .get('/invoices')
           .query({ 'list-type' : '2' })
           .reply(500, 'Storage - Something went wrong')
-          .get('/invoices')
-          .query({ 'list-type' : '2' })
-          .reply(500, 'Storage - Something went wrong');
+          /** The page is requested again 5 times */
+          .persist();
 
         const nockListFilesSwift = nock(urlSwift)
           .defaultReplyHeaders({ 'content-type': 'application/json' })
@@ -918,6 +1057,7 @@ describe("storage", function() {
           assert.strictEqual(files.source.size, 0);
           assert.strictEqual(files.target.size, 0);
           assert.strictEqual(files.cache.size, 0);
+          nock.cleanAll();
           done();
         });
       });

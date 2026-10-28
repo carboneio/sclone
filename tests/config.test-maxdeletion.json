@@ -5,6 +5,7 @@
   "maxDeletion": 3,
   "cacheFilename": "listFiles.cache.json",
   "integrityCheck": false,
+  "listRetryDelay": 1,
   "source": {
     "name": "s3",
     "accessKeyId": "access-key-id",

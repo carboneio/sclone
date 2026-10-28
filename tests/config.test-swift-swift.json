@@ -5,6 +5,7 @@
   "cacheFilename": "listFiles.cache.json",
   "cron": "*/5 * * * *",
   "integrityCheck": false,
+  "listRetryDelay": 1,
   "target": {
     "name": "swift",
     "authUrl": "https://auth.cloud.ovh.net/v3",

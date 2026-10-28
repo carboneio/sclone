@@ -92,6 +92,8 @@ At the root of the project, copy the `config.default.json` and name it `config.j
 | **cacheFilename** | `"listFiles.cache.json"` | File name of the cache, it is keeping the list of files synchronised during `bidirectional` mode only. The JSON file is created automatically in the current working directory (the directory the program is started from). An absolute path can also be provided. |
 | **transfers** | `15` | Number of file operations to run in parallel: upload/deletion. If a storage responds with many errors (status 500, socket or authentication error), consider reducing the number of transfers. |
 | **retry** | `1` | Max number of retries to sync a file. |
+| **listRetry** | `5` | Max number of retries of a listing page on a temporary error (network, status 5xx, 408, 429, page cut or invalid). Only the failed page is requested again, not the whole listing. A permanent error (access denied, bucket not found) is not retried. If a page still fails, the synchronisation is stopped before any operation. |
+| **listRetryDelay** | `1000` | Delay in milliseconds before the first retry of a listing page, doubled on each retry: 1s, 2s, 4s, 8s, 16s by default. |
 | **dryRun** | `false` | Do a trial run with no permanent changes, a JSON file is created including all file operations. |
 | **maxDeletion** |  | Max number of deletions allowed during a file synchronisation. If the threshold is reached, the process is terminated before deleting anything. It is a security measure to avoid propagation of unexpected bulk deletions. |
 

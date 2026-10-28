@@ -21,6 +21,9 @@ const storages = {
 
 let integrityCheck = false;
 let logQueueStatus = false;
+/** Number of retries of a listing page, and delay before the first retry, doubled on each retry: 1s, 2s, 4s, 8s, 16s */
+let listRetry = 5;
+let listRetryDelay = 1000;
 const getStorageName = (auth) => {
   if (!auth?.name) {
     throw new Error('Config "name" not defined on "config.json", accepted values: '+ SUPPORTED_STORAGES.toString());
@@ -41,6 +44,8 @@ function connection (config, type, callback) {
   storages[type].setTimeout(240000);
 
   integrityCheck = config?.integrityCheck === true;
+  listRetry = config?.listRetry ?? 5;
+  listRetryDelay = config?.listRetryDelay ?? 1000;
   if (config?.test === true) {
     logQueueStatus = false;
   }
@@ -70,6 +75,29 @@ function connection (config, type, callback) {
 }
 
 
+/** Errors which do not change by retrying: access denied, bucket not found... 408, 429 and 498 (SWIFT rate limit) are temporary */
+function isPermanentListingStatus (statusCode) {
+  return statusCode >= 400 && statusCode < 500 && [408, 429, 498].includes(statusCode) === false;
+}
+
+/**
+ * Request a listing page, and request it again on a temporary error (network, 5xx, page cut...).
+ * A failed page no longer fails the whole listing: on large buckets, the listing of hundreds of pages
+ * was lost on a single error, and the whole synchronisation with it.
+ *
+ * @param {Function} requestPage (done) => {}, with done(err, isPermanent)
+ */
+function requestListPage (container, requestPage, callback, retry = 0) {
+  requestPage(function (err, isPermanent) {
+    if (err && isPermanent !== true && retry < listRetry) {
+      const _delay = listRetryDelay * 2 ** retry;
+      console.log(`🟠 List files | ${container} | Page failed, retry ${retry + 1}/${listRetry} in ${_delay}ms | ${err.toString()}`);
+      return setTimeout(() => requestListPage(container, requestPage, callback, retry + 1), _delay);
+    }
+    return callback(err);
+  });
+}
+
 const listFiles = {
   [S3]: function(storage, container, options, callback) {
     if (callback === undefined) {
@@ -82,33 +110,46 @@ const listFiles = {
     options.autoPaging = options?.autoPaging ?? false;
     /** List file private variables */
     options.results = options?.results ?? [];
-    storage.listFiles(container, options, function (err, resp) {
+    let _isTruncated = false;
+    requestListPage(container, function (done) {
+      /** The fallback counter of tiny-storage-client is kept in the options: each request must start from the main storage */
+      options.try = 0;
+      storage.listFiles(container, options, function (err, resp) {
+        if (err) {
+          return done(err);
+        }
+        if (resp?.statusCode !== 200) {
+          return done(new Error(`Status: ${resp?.statusCode} | Body: ${ resp?.body?.error?.code ?? resp?.body?.toString()} | Bucket: ${container}` ), isPermanentListingStatus(resp?.statusCode));
+        }
+        /**
+         * An incomplete page read as a complete one makes files disappear from the listing: with "delete",
+         * they are deleted from the other storage. Every page is checked before being used.
+         */
+        const _listResult = resp?.body?.contents ?? [];
+        if (typeof resp?.body?.istruncated !== 'boolean') {
+          return done(new Error(`Invalid listing: "IsTruncated" not found | Bucket: ${container}`));
+        }
+        if (typeof resp.body.keycount === 'number' && resp.body.keycount !== _listResult.length) {
+          return done(new Error(`Invalid listing: ${_listResult.length} file(s) read but "KeyCount" is ${resp.body.keycount} | Bucket: ${container}`));
+        }
+        _isTruncated = resp.body.istruncated;
+        if (options.autoPaging === true && _isTruncated === true) {
+          const _lastKey = _listResult[_listResult.length - 1]?.key;
+          if (_lastKey === undefined || _lastKey === options.queries['start-after']) {
+            return done(new Error(`Invalid listing: the page is truncated but does not list any new file | Bucket: ${container}`));
+          }
+          options.queries['start-after'] = _lastKey;
+        }
+        for (let i = 0; i < _listResult.length; i++) {
+          options.results.push(_listResult[i]);
+        }
+        return done();
+      });
+    }, function (err) {
       if (err) {
         return callback(err);
       }
-      if (resp?.statusCode !== 200) {
-        return callback(new Error(`Status: ${resp?.statusCode} | Body: ${ resp?.body?.error?.code ?? resp?.body?.toString()} | Bucket: ${container}` ));
-      }
-      /**
-       * An incomplete page read as a complete one makes files disappear from the listing: with "delete",
-       * they are deleted from the other storage. Every page is checked before being used.
-       */
-      const _listResult = resp?.body?.contents ?? [];
-      if (typeof resp?.body?.istruncated !== 'boolean') {
-        return callback(new Error(`Invalid listing: "IsTruncated" not found | Bucket: ${container}`));
-      }
-      if (typeof resp.body.keycount === 'number' && resp.body.keycount !== _listResult.length) {
-        return callback(new Error(`Invalid listing: ${_listResult.length} file(s) read but "KeyCount" is ${resp.body.keycount} | Bucket: ${container}`));
-      }
-      for (let i = 0; i < _listResult.length; i++) {
-        options.results.push(_listResult[i]);
-      }
-      if (options.autoPaging === true && resp.body.istruncated === true) {
-        const _lastKey = _listResult[_listResult.length - 1]?.key;
-        if (_lastKey === undefined || _lastKey === options.queries['start-after']) {
-          return callback(new Error(`Invalid listing: the page is truncated but does not list any new file | Bucket: ${container}`));
-        }
-        options.queries['start-after'] = _lastKey;
+      if (options.autoPaging === true && _isTruncated === true) {
         return listFiles[S3](storage, container, options, callback);
       }
       return callback(null, options.results);
@@ -125,21 +166,31 @@ const listFiles = {
     options.autoPaging = options?.autoPaging ?? false;
     /** List file private variables */
     options.results = options?.results ?? [];
-
-    storage.listFiles(container, options, function (err, resp) {
+    let _hasNextPage = false;
+    requestListPage(container, function (done) {
+      storage.listFiles(container, options, function (err, resp) {
+        if (err) {
+          return done(err);
+        }
+        /** 204: empty container. Anything else than a JSON list (error page, HTML, ...) must not be read as files */
+        const _listResult = resp?.statusCode === 204 ? [] : resp?.body;
+        if ((resp?.statusCode !== 200 && resp?.statusCode !== 204) || Array.isArray(_listResult) === false) {
+          return done(new Error(`Invalid listing: a JSON list is expected | Status: ${resp?.statusCode} | Container: ${container}`), isPermanentListingStatus(resp?.statusCode));
+        }
+        _hasNextPage = options.autoPaging === true && _listResult.length === options.queries.limit;
+        if (_hasNextPage === true) {
+          options.queries.marker = _listResult[_listResult.length - 1].name;
+        }
+        for (let i = 0; i < _listResult.length; i++) {
+          options.results.push(_listResult[i]);
+        }
+        return done();
+      });
+    }, function (err) {
       if (err) {
         return callback(err);
       }
-      /** 204: empty container. Anything else than a JSON list (error page, HTML, ...) must not be read as files */
-      const _listResult = resp?.statusCode === 204 ? [] : resp?.body;
-      if ((resp?.statusCode !== 200 && resp?.statusCode !== 204) || Array.isArray(_listResult) === false) {
-        return callback(new Error(`Invalid listing: a JSON list is expected | Status: ${resp?.statusCode} | Container: ${container}`));
-      }
-      for (let i = 0; i < _listResult.length; i++) {
-        options.results.push(_listResult[i]);
-      }
-      if (options.autoPaging === true && _listResult.length === options.queries.limit) {
-        options.queries.marker = _listResult[_listResult.length - 1].name;
+      if (_hasNextPage === true) {
         return listFiles[SWIFT](storage, container, options, callback);
       }
       return callback(null, options.results);
@@ -471,7 +522,9 @@ function fetchListFiles(files, options, callback) {
   const _listFileStorages = [ "target", "source" ];
   execQueue('list-files-source-target', _listFileStorages,
     function(type, next) {
-      return listFiles[storages[type].name](storages[type], storages[type].bucket, { autoPaging: true, ...options?.[storages[type].name] }, (err, results) => {
+      /** The queries are copied: the pagination marker of a listing must not leak into the next one */
+      const _listOptions = { autoPaging: true, ...options?.[storages[type].name], queries: { ...options?.[storages[type].name]?.queries } };
+      return listFiles[storages[type].name](storages[type], storages[type].bucket, _listOptions, (err, results) => {
         if (err) {
           _listFileError = err.toString();
           return next(err);
@@ -514,16 +567,14 @@ function fetchListFiles(files, options, callback) {
         return next();
       });
     },
-    { concurrency: 2, logQueueStatus: logQueueStatus },
+    /** No retry of the whole listing: each page is already retried, and the result of a retry was ignored */
+    { concurrency: 2, retry: 0, logQueueStatus: logQueueStatus },
     function (err) {
       if (err) {
         return callback("Execqueue - List files error | " + err.toString());
       }
       if (_listFileError) {
-        /**
-         * Stop immediately, the listing is missing files and it is skewing sync
-         * Possible evolution: Try to run the listing a second time if the first failed?
-         */
+        /** Stop immediately, the listing is missing files and it is skewing sync */
         return callback("List files error | " + _listFileError.toString());
       }
       return callback();

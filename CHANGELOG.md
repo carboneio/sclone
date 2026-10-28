@@ -34,6 +34,10 @@ All notable changes to this project will be documented in this file. This projec
   - a download error (`404` file deleted after the listing, `403`, `429`, `498` rate limited) was uploaded to the other storage as the content of the file: the error page replaced the file, with the `content-type` of the error. A download must now return `200`,
   - a refused upload (`422` content different from the `ETag` sent by `integrityCheck`, `413` too large, `403`, `404` container) was counted as synchronised. In `bidirectional` mode, the file was saved in the cache: on the next run, it was read as deleted from the storage where the upload had failed, and with `"delete": true` it was deleted from the other storage, which had the only copy. An upload must now return `201`.
 
+- Fixed the whole listing lost on a single error. A network error or a status 5xx on one page failed the listing of the bucket, and the synchronisation with it: on large buckets (hundreds of pages), a temporary error of a few seconds stopped the synchronisation. Now only the failed page is requested again, up to `listRetry` times (default `5`), after `listRetryDelay` milliseconds (default `1000`) doubled on each retry. Temporary errors only: network, status 5xx, 408, 429, 498, page cut or invalid. A permanent error (access denied, bucket not found) is not retried. If a page still fails, the synchronisation is stopped before any operation, as before.
+- Fixed the retry of the listing: the whole listing was listed again once, but its result was ignored and the synchronisation failed anyway. It is replaced by the retry of each page.
+- Fixed the pagination marker (`start-after`, `marker`) written into the `queries` given as options to `fetchListFiles`: reused for a second listing, the options made it start after the last file of the previous one.
+
 ## 1.2.0
 - Released the 2026/08/12
 - ⚠️ Node.js 20 or higher is now required (`node-cron` 4 and `tiny-storage-client` 3.5 dropped older Node versions).
