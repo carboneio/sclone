@@ -18,13 +18,13 @@ All notable changes to this project will be documented in this file. This projec
   - a listed file has no key, no etag/hash, or an invalid modification date: it crashed the process.
   A SWIFT listing with the status `204` is read as an empty container.
 
-- Fixed S3 keys looking like numbers or booleans, by updating `tiny-storage-client` (commit `27dd905` until 3.6.0 is published). The XML parser converted them: `0001` became `1`, `1e3` became `1000`, `true` a boolean, `12345678901234567890` became `12345678901234567000`. Consequences:
+- Fixed S3 keys looking like numbers or booleans, by updating `tiny-storage-client` to 3.6.0. The XML parser converted them: `0001` became `1`, `1e3` became `1000`, `true` a boolean, `12345678901234567890` became `12345678901234567000`. Consequences:
   - the file could not be downloaded or deleted with the converted key, the synchronisation failed on every run, or uploaded it again on every run,
   - different keys such as `1`, `01` and `1.0` were read as the same file, only one of them was synchronised,
   - when such a key was the last one of a page, the next page started after the converted key: files were skipped or listed twice.
   A listed key that is not a string now makes the listing fail.
 
-- Fixed S3 keys and ETags containing XML entities, by updating `tiny-storage-client` (commit `dca5d47` until 3.6.0 is published). They were not decoded: `R&D.pdf` was listed as `R&amp;D.pdf`, `l'offre.pdf` as `l&#39;offre.pdf` by OVH, and the AWS ETags as `&quot;…&quot;`. Consequences:
+- Fixed S3 keys and ETags containing XML entities, by updating `tiny-storage-client` to 3.6.0. They were not decoded: `R&D.pdf` was listed as `R&amp;D.pdf`, `l'offre.pdf` as `l&#39;offre.pdf` by OVH, and the AWS ETags as `&quot;…&quot;`. Consequences:
   - an S3 source file with such a key could not be downloaded (404): the synchronisation failed on every run,
   - with a SWIFT source and an S3 target, the file was never found on the target: it was uploaded again on every run. With `"delete": true`, the encoded key was also deleted from the target, and S3 read it as the real file: on every run the file was deleted from the target, then uploaded again,
   - a key containing a `&` or a `<` made the whole bulk deletion of 1000 files fail with `MalformedXML`,
@@ -38,6 +38,7 @@ All notable changes to this project will be documented in this file. This projec
 - Fixed files not deleted counted as deleted. S3 (`DeleteObjects`) and the SWIFT bulk delete return a status `200` even if some files are not deleted (access denied...), the errors are listed in the body: they were ignored, and a SWIFT bulk delete was never checked, whatever its status. In `bidirectional` mode, the file was already removed from the cache: on the next run, the file still present was read as a new file, and copied back to the other storage. A deletion with a file not deleted now fails: the first 10 files and their error are written into the errors file of the queue (`logs/`), the cache is not saved and the process exits with code `1`. A file not found (already deleted) is not an error.
 - Fixed the retry of the listing: the whole listing was listed again once, but its result was ignored and the synchronisation failed anyway. It is replaced by the retry of each page.
 - Fixed the pagination marker (`start-after`, `marker`) written into the `queries` given as options to `fetchListFiles`: reused for a second listing, the options made it start after the last file of the previous one.
+- Updated dependencies: `tiny-storage-client` 3.5.0 → 3.6.0, dev `mocha` 11.8.0 → 12.0.3.
 
 ## 1.2.0
 - Released the 2026/08/12

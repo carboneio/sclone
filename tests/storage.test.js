@@ -27,6 +27,12 @@ const tokenAuthSwift = 'gAAAAABe8JlEGYPUwwOyjqgUBl11gSjDOw5VTtUZ5n8SWxghRGwakDkP
 
 let _config = {};
 
+/** Realistic S3 DeleteObjects response: every key of the request body is reported as deleted */
+function deleteResultFromRequest (body) {
+  const _keys = body.match(/<Key>[^<]*<\/Key>/g) ?? [];
+  return '<?xml version="1.0" encoding="UTF-8"?><DeleteResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">' + _keys.map((key) => `<Deleted>${key}</Deleted>`).join('') + '</DeleteResult>';
+}
+
 describe("storage", function() {
 
   beforeEach(function(done) {
@@ -71,7 +77,7 @@ describe("storage", function() {
         })
         .reply(200, (uri, body) => {
           assert.strictEqual(body, "<Delete><Object><Key>file1.txt</Key></Object><Object><Key>file2.txt</Key></Object><Object><Key>file3.txt</Key></Object><Object><Key>file4.txt</Key></Object><Quiet>false</Quiet></Delete>");
-          return '';
+          return deleteResultFromRequest(body);
         });
 
       const _filestoDeleteTarget = [
@@ -93,7 +99,7 @@ describe("storage", function() {
         .query((actualQueryObject) => actualQueryObject.delete !== undefined)
         .reply(200, (uri, body) => {
           assert.strictEqual(body, "<Delete><Object><Key>R&amp;D &lt;2024&gt;.pdf</Key></Object><Object><Key>l&apos;offre &quot;v2&quot;.pdf</Key></Object><Quiet>false</Quiet></Delete>");
-          return '';
+          return deleteResultFromRequest(body);
         });
 
       storage.syncFiles([], [{ key: 'R&D <2024>.pdf' }, { key: 'l\'offre "v2".pdf' }], [], [], { mode: helper.MODES.BI }, function(err) {
@@ -112,7 +118,7 @@ describe("storage", function() {
         })
         .reply(200, (uri, body) => {
           assert.strictEqual(body.split("files").length - 1, 1000);
-          return '';
+          return deleteResultFromRequest(body);
         })
         .post('/invoices/')
         .query((actualQueryObject) => {
@@ -121,7 +127,7 @@ describe("storage", function() {
         })
         .reply(200, (uri, body) => {
           assert.strictEqual(body.split("files").length - 1, 1000);
-          return '';
+          return deleteResultFromRequest(body);
         });
 
       const _filestoDeleteS3 = [];
@@ -184,6 +190,20 @@ describe("storage", function() {
           .reply(200, '<?xml version="1.0" encoding="UTF-8"?><DeleteResult><Deleted><Key>file1.txt</Key></Deleted><Error><Key>file2.txt</Key><Code>AccessDenied</Code><Message>Access Denied</Message></Error></DeleteResult>');
 
         storage.syncFiles([], [{ key: 'file1.txt' }, { key: 'file2.txt' }], [], [], { mode: helper.MODES.BI }, _assertDeleteError('delete-files-target', 'S3 Delete files | 1/2 file(s) not deleted | file2.txt: AccessDenied', () => {
+          assert.strictEqual(nockBulkDeleteS3.pendingMocks().length, 0);
+          done();
+        }));
+      });
+
+      it('should return an error if S3 replies 200 without a DeleteResult (the deletion is not confirmed)', function(done) {
+        /** For instance a proxy page: the objects are not deleted, the caller must not save the cache */
+        const nockBulkDeleteS3 = nock(urlS3)
+          .defaultReplyHeaders({ 'content-type': 'text/html' })
+          .post('/invoices/')
+          .query((actualQueryObject) => actualQueryObject.delete !== undefined)
+          .reply(200, '<html><body><h1>Service Unavailable</h1></body></html>');
+
+        storage.syncFiles([], [{ key: 'file1.txt' }], [], [], { mode: helper.MODES.BI }, _assertDeleteError('delete-files-target', '"DeleteResult" not found', () => {
           assert.strictEqual(nockBulkDeleteS3.pendingMocks().length, 0);
           done();
         }));
@@ -471,7 +491,7 @@ describe("storage", function() {
         })
         .reply(200, (uri, body) => {
           assert.strictEqual(body, "<Delete><Object><Key>old1.txt</Key></Object><Object><Key>old2.txt</Key></Object><Quiet>false</Quiet></Delete>");
-          return '';
+          return deleteResultFromRequest(body);
         });
 
       /** Connect an S3-S3 configuration: the source must be an S3 storage to test the S3 bulk delete */
