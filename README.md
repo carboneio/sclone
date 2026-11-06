@@ -178,7 +178,7 @@ The file resolution is not based on the `source` but both storages. Sclone compa
 
 For the first synchronisation, even if the `deletion` option is enabled, it won't delete anything. It will make sure the source and target are synchronised. If a file does not exist on one storage, it will be pushed into the other storage, and vice-versa. Finally, a cache of the list of synchronised files is created (named `listFiles.cache.json` by default).
 
-For all subsequent synchronisations, Sclone will use the cache as the source of truth of the previous synchronisation to determine new, edited, or deleted files. If the cache is deleted, it will be considered a first synchronisation; it won't delete anything and will create a new cache. If a synchronisation ends with transfer errors, the cache is not updated: the failed files are retried on the next run.
+For all subsequent synchronisations, Sclone will use the cache as the source of truth of the previous synchronisation to determine new, edited, or deleted files. If the cache is deleted, it will be considered a first synchronisation; it won't delete anything and will create a new cache. If a synchronisation ends with transfer errors, the cache is not updated: the failed files are retried on the next run. With `delete` enabled, an operation that keeps failing (for example a file the storage refuses to delete) must be fixed by hand: while the cache is not updated, a file deleted on one storage is still considered deleted on the other, even if a new file was created under the same name in the meantime.
 
 ### S3 multipart files
 
@@ -186,7 +186,7 @@ The S3 etag of a file uploaded with a multipart upload is not the MD5 of its con
 
 When only one of the two versions has a multipart etag, both modes consider the files identical if they have the same size and the multipart version is not newer than the other one (the copy is always created after the original). Consequences:
 - A multipart version uploaded again after the copy is synchronised, even with the same size.
-- A content change that keeps the exact same size, made on the non-multipart version only, is not detected until one of the files is modified again.
+- A content change that keeps the exact same size, made on the non-multipart version only, is never detected: only a size change, or a newer multipart version, is synchronised.
 - When both etags are multipart but different, the content cannot be compared: the file is synchronised.
 
 With `integrityCheck`, the downloaded content of a multipart file cannot be checked against its etag: the check is skipped for these files. The upload is still verified by the storage with the `Content-MD5` header (S3) or the `ETag` header (SWIFT).
