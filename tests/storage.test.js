@@ -27,6 +27,12 @@ const tokenAuthSwift = 'gAAAAABe8JlEGYPUwwOyjqgUBl11gSjDOw5VTtUZ5n8SWxghRGwakDkP
 
 let _config = {};
 
+/** Realistic S3 DeleteObjects response: every key of the request body is reported as deleted */
+function deleteResultFromRequest (body) {
+  const _keys = body.match(/<Key>[^<]*<\/Key>/g) ?? [];
+  return '<?xml version="1.0" encoding="UTF-8"?><DeleteResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">' + _keys.map((key) => `<Deleted>${key}</Deleted>`).join('') + '</DeleteResult>';
+}
+
 describe("storage", function() {
 
   beforeEach(function(done) {
@@ -71,7 +77,7 @@ describe("storage", function() {
         })
         .reply(200, (uri, body) => {
           assert.strictEqual(body, "<Delete><Object><Key>file1.txt</Key></Object><Object><Key>file2.txt</Key></Object><Object><Key>file3.txt</Key></Object><Object><Key>file4.txt</Key></Object><Quiet>false</Quiet></Delete>");
-          return '';
+          return deleteResultFromRequest(body);
         });
 
       const _filestoDeleteTarget = [
@@ -96,7 +102,7 @@ describe("storage", function() {
         })
         .reply(200, (uri, body) => {
           assert.strictEqual(body.split("files").length - 1, 1000);
-          return '';
+          return deleteResultFromRequest(body);
         })
         .post('/invoices/')
         .query((actualQueryObject) => {
@@ -105,7 +111,7 @@ describe("storage", function() {
         })
         .reply(200, (uri, body) => {
           assert.strictEqual(body.split("files").length - 1, 1000);
-          return '';
+          return deleteResultFromRequest(body);
         });
 
       const _filestoDeleteS3 = [];
@@ -242,7 +248,7 @@ describe("storage", function() {
         })
         .reply(200, (uri, body) => {
           assert.strictEqual(body, "<Delete><Object><Key>old1.txt</Key></Object><Object><Key>old2.txt</Key></Object><Quiet>false</Quiet></Delete>");
-          return '';
+          return deleteResultFromRequest(body);
         });
 
       /** Connect an S3-S3 configuration: the source must be an S3 storage to test the S3 bulk delete */
@@ -261,6 +267,40 @@ describe("storage", function() {
             done();
           });
         });
+      });
+    });
+
+    it('should return an error if S3 replies 200 without a DeleteResult (the deletion is not confirmed)', function(done) {
+      /** For instance a proxy page: the objects are not deleted, the caller must not save the cache */
+      const nockBulkDeleteS3 = nock(urlS3)
+        .defaultReplyHeaders({ 'content-type': 'text/html' })
+        .post('/invoices/')
+        .query((actualQueryObject) => actualQueryObject.delete !== undefined)
+        .reply(200, '<html><body><h1>Service Unavailable</h1></body></html>');
+
+      storage.syncFiles([], [{ key: 'file1.txt' }], [], [], { mode: helper.MODES.BI }, function(err) {
+        assert.strictEqual(err instanceof Error, true);
+        assert.strictEqual(err.toString().includes('delete-files-target'), true);
+        assert.strictEqual(err.toString().includes('1 operation(s) failed'), true);
+        assert.strictEqual(nockBulkDeleteS3.pendingMocks().length, 0);
+        done();
+      });
+    });
+
+    it('should escape XML special characters of S3 keys to delete', function(done) {
+      const nockBulkDeleteS3 = nock(urlS3)
+        .defaultReplyHeaders({ 'content-type': 'application/xml' })
+        .post('/invoices/')
+        .query((actualQueryObject) => actualQueryObject.delete !== undefined)
+        .reply(200, (uri, body) => {
+          assert.strictEqual(body, "<Delete><Object><Key>R&amp;D.pdf</Key></Object><Quiet>false</Quiet></Delete>");
+          return deleteResultFromRequest(body);
+        });
+
+      storage.syncFiles([], [{ key: 'R&D.pdf' }], [], [], { mode: helper.MODES.BI }, function(err) {
+        assert.strictEqual(err, undefined);
+        assert.strictEqual(nockBulkDeleteS3.pendingMocks().length, 0);
+        done();
       });
     });
   });
@@ -349,6 +389,40 @@ describe("storage", function() {
               assert.strictEqual(value.md5, "fde6d729123cee4db6bfa3606306bc8e");
             }
           }
+          done();
+        });
+      });
+
+      it('should keep S3 keys as strings, decode XML entities of keys and remove quotes from etag', function(done) {
+        const nockListFilesS3 = nock(urlS3)
+          .defaultReplyHeaders({ 'content-type': 'application/xml' })
+          .get('/invoices')
+          .query({ 'list-type' : '2' })
+          .reply(200, '<?xml version="1.0" encoding="UTF-8"?><ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Name>invoices</Name><Prefix></Prefix><KeyCount>2</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated>' +
+            '<Contents><Key>0001</Key><LastModified>2023-03-02T07:18:55.000Z</LastModified><ETag>&quot;0123456789012345678901234567890a&quot;</ETag><Size>4</Size><StorageClass>STANDARD</StorageClass></Contents>' +
+            '<Contents><Key>R&amp;D.pdf</Key><LastModified>2023-03-02T07:18:55.000Z</LastModified><ETag>&quot;dd58d4bd19ea3e5277844c066ba57b39&quot;</ETag><Size>9</Size><StorageClass>STANDARD</StorageClass></Contents>' +
+            '</ListBucketResult>');
+
+        const nockListFilesS3SBG = nock(urlS3SBG)
+          .defaultReplyHeaders({ 'content-type': 'application/xml' })
+          .get('/invoices')
+          .query({ 'list-type' : '2' })
+          .reply(200, () => {
+            return fs.readFileSync(path.join(__dirname, "assets", "listFiles.s3.empty.xml"));
+          });
+
+        storage.fetchListFiles(files, function(err) {
+          assert.strictEqual(err, undefined);
+          assert.strictEqual(nockListFilesS3.pendingMocks().length, 0);
+          assert.strictEqual(nockListFilesS3SBG.pendingMocks().length, 0);
+          assert.strictEqual(files.target.size, 0);
+          /** "0001" is not converted to the number 1, "&amp;" is decoded */
+          assert.deepStrictEqual([...files.source.keys()], ['0001', 'R&D.pdf']);
+          assert.strictEqual(files.source.get('0001').key, '0001');
+          assert.strictEqual(files.source.get('0001').md5, '0123456789012345678901234567890a');
+          assert.strictEqual(files.source.get('0001').bytes, 4);
+          assert.strictEqual(files.source.get('R&D.pdf').key, 'R&D.pdf');
+          assert.strictEqual(files.source.get('R&D.pdf').md5, 'dd58d4bd19ea3e5277844c066ba57b39');
           done();
         });
       });

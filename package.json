@@ -58,7 +58,7 @@
   "dependencies": {
     "@carboneio/cqueue": "1.0.0",
     "node-cron": "4.6.0",
-    "tiny-storage-client": "3.5.0"
+    "tiny-storage-client": "3.6.0"
   },
   "devDependencies": {
     "@yao-pkg/pkg": "6.22.0",

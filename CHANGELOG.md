@@ -2,6 +2,9 @@
 
 All notable changes to this project will be documented in this file. This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+- Updated `tiny-storage-client` 3.5.0 → 3.6.0. S3 listings now keep keys exactly as written (`0001` is no longer read as the number `1`), decode XML entities in keys and ETags (`R&amp;D.pdf`, `&quot;…&quot;`), escape the keys sent to `DeleteObjects`, and a `200` response without a complete `ListBucketResult`, `Buckets`, `DeleteResult` or `CopyObjectResult` is now an error instead of being read as an empty, successful result. Such files were uploaded again on every run or failed to be deleted; with `delete: true`, an incomplete listing could delete files from the other storage.
+
 ## 1.2.0
 - Released the 2026/08/12
 - ⚠️ Node.js 20 or higher is now required (`node-cron` 4 and `tiny-storage-client` 3.5 dropped older Node versions).
