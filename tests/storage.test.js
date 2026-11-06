@@ -262,6 +262,15 @@ describe("storage", function() {
         storage.syncFiles([], [], [], [{ key: 'old1.txt' }], { mode: helper.MODES.BI }, _assertDeleteError('delete-files-source', 'Swift Delete files | Unexpected response, the deleted files cannot be checked | <html><body>OK</body></html>', done));
       });
 
+      it('should print the unexpected JSON body of the SWIFT bulk delete in the error', function(done) {
+        nock(urlSwift)
+          .post('/')
+          .query(true)
+          .reply(200, { 'Number Deleted': 1 });
+
+        storage.syncFiles([], [], [], [{ key: 'old1.txt' }], { mode: helper.MODES.BI }, _assertDeleteError('delete-files-source', 'cannot be checked | {"Number Deleted":1}', done));
+      });
+
       it('should not return an error if the SWIFT bulk delete does not find a file (already deleted)', function(done) {
         const nockBulkDeleteSwift = nock(urlSwift)
           .post('/', (body) => body === 'invoices/old1.txt\ninvoices/old2.txt\n')
@@ -762,6 +771,28 @@ describe("storage", function() {
           });
         });
 
+        it('should not request a page again on a redirect (301 wrong region or endpoint: permanent)', function(done) {
+          let _requests = 0;
+          nock(urlS3)
+            .defaultReplyHeaders({ 'content-type': 'application/xml' })
+            .get('/invoices')
+            .query({ 'list-type' : '2' })
+            .reply(301, () => {
+              _requests++;
+              return '<?xml version="1.0" encoding="UTF-8"?><Error><Code>PermanentRedirect</Code><Endpoint>s3.eu-west-1.amazonaws.com</Endpoint></Error>';
+            })
+            .persist();
+          mockListings([]);
+
+          storage.fetchListFiles(files, function(err) {
+            assert.strictEqual(typeof err, 'string');
+            assert.strictEqual(err.includes('Status: 301 | Body: '), true, err);
+            assert.strictEqual(_requests, 1);
+            nock.cleanAll();
+            done();
+          });
+        });
+
         it('should not modify the queries given as options (the pagination marker must not leak into the next listing)', function(done) {
           const _options = { s3: { queries: { 'max-keys': 2 } } };
           const _nockSource = nock(urlS3)
@@ -1023,6 +1054,27 @@ describe("storage", function() {
           storage.fetchListFiles(files, { swift: { queries: { limit: 15 } } }, function(err) {
             assert.strictEqual(typeof err, 'string');
             assert.strictEqual(err.includes('Invalid listing: a file without a valid "name" was returned by the target storage'), true, err);
+            nock.cleanAll();
+            done();
+          });
+        });
+
+        it('should not request a page again on a redirect (301: permanent)', function(done) {
+          let _requests = 0;
+          mockSourceListing();
+          nock(urlSwift)
+            .get('/invoices')
+            .query({ 'limit' : '15' })
+            .reply(301, () => {
+              _requests++;
+              return '';
+            })
+            .persist();
+
+          storage.fetchListFiles(files, { swift: { queries: { limit: 15 } } }, function(err) {
+            assert.strictEqual(typeof err, 'string');
+            assert.strictEqual(err.includes('Invalid listing: a JSON list is expected | Status: 301 | Container: invoices'), true, err);
+            assert.strictEqual(_requests, 1);
             nock.cleanAll();
             done();
           });

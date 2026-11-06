@@ -75,9 +75,9 @@ function connection (config, type, callback) {
 }
 
 
-/** Errors which do not change by retrying: access denied, bucket not found... 408, 429 and 498 (SWIFT rate limit) are temporary */
+/** Errors which do not change by retrying: redirect (wrong region or endpoint), access denied, bucket not found... 408, 429 and 498 (SWIFT rate limit) are temporary */
 function isPermanentListingStatus (statusCode) {
-  return statusCode >= 400 && statusCode < 500 && [408, 429, 498].includes(statusCode) === false;
+  return statusCode >= 300 && statusCode < 500 && [408, 429, 498].includes(statusCode) === false;
 }
 
 /**
@@ -234,11 +234,11 @@ const deleteFiles = {
       if (resp?.statusCode !== 200) {
         return callback(new Error(`Swift Delete files | Status code ${resp?.statusCode}`));
       }
-      /** The bulk delete returns 200 even if files are not deleted: the result is in the body. A file not found is not an error */
+      /** The bulk delete returns 200 even if files are not deleted: the result is in the body. A file not found is not an error The body is a Buffer unless the content type was JSON */
       const _responseStatus = resp?.body?.['Response Status'];
       const _errors = resp?.body?.Errors;
       if (typeof _responseStatus !== 'string' || Array.isArray(_errors) === false) {
-        return callback(new Error(`Swift Delete files | Unexpected response, the deleted files cannot be checked | ${resp?.body?.toString()?.slice(0, 200)}`));
+        return callback(new Error(`Swift Delete files | Unexpected response, the deleted files cannot be checked | ${(Buffer.isBuffer(resp?.body) ? resp.body.toString() : JSON.stringify(resp?.body))?.slice(0, 200)}`));
       }
       if (_errors.length > 0 || _responseStatus.startsWith('2') === false) {
         return callback(new Error(`Swift Delete files | ${_errors.length}/${objects.length} file(s) not deleted | Response Status: ${_responseStatus} | ${formatDeleteErrors(_errors)}`));
@@ -567,11 +567,11 @@ function fetchListFiles(files, options, callback) {
             _listFileError = `Invalid listing: a file without a valid "${_invalidField}" was returned by the ${type} storage | ${JSON.stringify(_object)}`;
             return next(new Error(_listFileError));
           }
-          const _key = copyString(_object?.key ?? _object?.name);
+          const _key = _object?.key ?? _object?.name;
           let _file = null;
           if (storages[type].name === S3) {
             _file = {
-              key         : _key,
+              key         : copyString(_key),
               md5         : copyString(_object.etag.replaceAll("\"", "")),
               lastmodified: new Date(new Date(_object.lastmodified).toUTCString()).getTime(),
               bytes       : _object.size
@@ -586,7 +586,7 @@ function fetchListFiles(files, options, callback) {
               bytes       : _object.bytes
             };
           }
-          files[type].set(_key, _file);
+          files[type].set(_file.key, _file);
         }
         return next();
       });
