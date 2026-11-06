@@ -1,6 +1,6 @@
 {
   "name": "@steevepay/sclone",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Clone S3/SWIFT storages between multiple cloud providers (AWS S3, OVHCloud, Scaleway, Ceph.io,  DigitalOcean Spaces, Cloudflare R2, Seagate Lyve Cloud, Tencent Cloud, Alibaba Cloud OSS, IBM COS S3, Dreamhost S3, GCS, IDrive e2, Synology C2, IONOS Cloud, Minio, Petabox)",
   "main": "index.js",
   "bin": {

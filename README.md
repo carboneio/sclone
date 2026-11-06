@@ -52,12 +52,12 @@ Bidirectional sync between two storages located in different regions. Every sync
 
 1. Download the latest binary from the [Release page](https://github.com/carboneio/sclone/releases) and make it executable:
 ```sh
-chmod +x ./sclone-1.2.0-linux
+chmod +x ./sclone-1.3.0-linux
 ```
 2. Create a file `config.json` near the binary to define the source/target storage credentials, and options. You can copy the `config.default.json` file as an example. Read the [configuration](#configuration) section for details.
 3. Finally start the synchronisation. 
 ```sh
-./sclone-1.2.0-linux
+./sclone-1.3.0-linux
 ```
 
 ### Option 2: npm (requires Node.js 20 or higher)

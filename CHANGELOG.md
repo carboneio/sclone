@@ -2,7 +2,8 @@
 
 All notable changes to this project will be documented in this file. This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## 1.3.0
+- Released the 2026/11/06
 - Fixed lost error files and wrong exit code on failure: the process was killed with `process.exit()` before cqueue finished writing the error file of the last retry into `logs`, and it exited with code `0`. It now exits with code `1` once all files are written.
 - Reduced the memory used by the file listing by ~70% (measured on 2 × 336 000 S3 objects: 623 MB → 176 MB of heap, peak RSS 1.4 GB → 0.65 GB). Each listed file is now copied into a compact object holding only `key`, `md5`, `lastmodified` and `bytes`: the strings returned by the XML parser were slices of the XML page, so every page listed stayed in memory for the whole synchronisation. Listing pages are also appended in place instead of copying the whole result array on every page. On large buckets, several sclone processes on the same server were killed by the Linux OOM killer, or stopped with "JavaScript heap out of memory".
 
