@@ -7,6 +7,37 @@ const helper = require('./helper');
  * - [ ] Improve log deletion: `syncLogClean` function
  */
 
+/** S3 multipart upload etag: "<md5 of the parts md5>-<number of parts>", it is NOT the MD5 of the content */
+const MULTIPART_ETAG_REGEX = /^[0-9a-f]{32}-\d+$/i;
+
+function isMultipartEtag(md5) {
+  return typeof md5 === 'string' && MULTIPART_ETAG_REGEX.test(md5);
+}
+
+/**
+ * Returns true if both files have the same content.
+ *
+ * A file copied by sclone is uploaded with a single PUT: if the original has a multipart etag, the copy gets
+ * the real MD5 and the two values never match. In that case only, the files are considered identical if:
+ * - they have the same size,
+ * - and the multipart version is not newer than the other one: the copy is always created after the
+ *   original, a multipart version newer than the copy means that the original was uploaded again since.
+ */
+function isSameContent(fileA, fileB) {
+  if (fileA.md5 === fileB.md5) {
+    return true;
+  }
+  const _isMultipartA = isMultipartEtag(fileA.md5);
+  if (_isMultipartA === isMultipartEtag(fileB.md5)) {
+    return false;
+  }
+  const _multipart = _isMultipartA ? fileA : fileB;
+  const _other = _isMultipartA ? fileB : fileA;
+  return typeof _multipart.bytes === 'number'
+    && _multipart.bytes === _other.bytes
+    && _multipart.lastmodified <= _other.lastmodified;
+}
+
 /**
  * @param {*} callback
  */
@@ -53,7 +84,7 @@ function computeSync(files, mode, deletion, logSync) {
     }
 
     /** If a file exists on both side, but the content changed */
-    if (mode === helper.MODES.BI && _objectSource !== undefined && _objectSource.md5 !== value.md5 && value.lastmodified > _objectSource.lastmodified) {
+    if (mode === helper.MODES.BI && _objectSource !== undefined && isSameContent(_objectSource, value) === false && value.lastmodified > _objectSource.lastmodified) {
       files.cache.set(key, value);
       files.source.set(key, value);
       value.updated = true;
@@ -94,8 +125,8 @@ function computeSync(files, mode, deletion, logSync) {
     /** If a file exists on both side, but the content changed.
      * ">=" and not ">": when the timestamps are identical, the source version wins the conflict
      * (the target loop above uses a strict ">", so only this direction fires on a tie) */
-    if ((mode === helper.MODES.BI && _objectTarget !== undefined && _objectTarget.md5 !== value.md5 && value.lastmodified >= _objectTarget.lastmodified) ||
-        (mode === helper.MODES.UNI && _objectTarget !== undefined && _objectTarget.md5 !== value.md5)) {
+    if ((mode === helper.MODES.BI && _objectTarget !== undefined && isSameContent(_objectTarget, value) === false && value.lastmodified >= _objectTarget.lastmodified) ||
+        (mode === helper.MODES.UNI && _objectTarget !== undefined && isSameContent(_objectTarget, value) === false)) {
       files.target.set(key, value);
       files.cache.set(key, value);
       value.updated = true;
@@ -161,6 +192,8 @@ function syncLogClean(interval) {
 
 module.exports = {
   computeSync,
+  isSameContent,
+  isMultipartEtag,
   syncLogClean,
   syncLogGenerate
 };

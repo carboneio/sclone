@@ -158,7 +158,9 @@ describe("Sclone", function () {
                 assert.strictEqual(getOccurrence(_output, 'New synchro starting...'), 0);
                 assert.strictEqual(getOccurrence(_output, 'Error: THIS IS A MAJOR ERROR'), 2);
                 assert.strictEqual(getOccurrence(_output, 'Status code: 500'), 2);
-                assert.strictEqual(getOccurrence(_output, 'Retry to re-execute the process on failled elements...'), 1);
+                /** Each page is requested again ("listRetry": 1), the whole listing is not */
+                assert.strictEqual(getOccurrence(_output, 'Page failed, retry 1/1'), 2);
+                assert.strictEqual(getOccurrence(_output, 'Retry to re-execute the process on failled elements...'), 0);
                 assert.strictEqual(getOccurrence(_output, 'Stop retrying, check the error file!'), 1);
                 assert.strictEqual(getOccurrence(_output, 'Cache loading skipped on "unidirectional" mode'), 1);
                 assert.strictEqual(getOccurrence(_output, 'Cache saving skipped on "unidirectional" mode'), 0);

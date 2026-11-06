@@ -574,27 +574,111 @@ describe("logic", function() {
     });
 
     /**
-     * KNOWN LIMITATION: S3 multipart uploads have an etag that is NOT the MD5 of the content
-     * (format "<hash>-<partCount>"). After sclone copies such a file (single PUT), the copy gets a real
-     * MD5 etag which never matches the multipart etag: the md5 comparison fails on every run and the
-     * newest side is re-copied again and again (ping-pong in bidirectional mode, re-upload on every
-     * run in unidirectional mode), even though the content is identical.
+     * S3 multipart uploads have an etag that is NOT the MD5 of the content (format "<hash>-<partCount>").
+     * The copy made by sclone (single PUT) gets the real MD5: the two etags never match.
      */
-    it('KNOWN LIMITATION: should re-upload a multipart-etag file on every run even if the content did not change', function() {
+    it('should not push back the copy of a multipart-etag file to the source if the content did not change', function() {
       /** The source file was uploaded to S3 with a multipart upload */
-      files.source.set('file1', { md5: "a55b475be5fc06d42e1baf84231253ce-2", key: "file.txt", lastmodified: 1685107765 } );
+      files.source.set('file1', { md5: "a55b475be5fc06d42e1baf84231253ce-2", key: "file.txt", lastmodified: 1685107765, bytes: 10899179 } );
       /** The target file is the copy made by a previous sclone run: same content, real md5, newer timestamp */
-      files.target.set('file1', { md5: "0c9f74b0876cbb3ff8c86e0ea2b1fe45", key: "file.txt", lastmodified: 1685107819 } );
-      files.cache.set('file1', { md5: "0c9f74b0876cbb3ff8c86e0ea2b1fe45", key: "file.txt", lastmodified: 1685107819 } );
+      files.target.set('file1', { md5: "0c9f74b0876cbb3ff8c86e0ea2b1fe45", key: "file.txt", lastmodified: 1685107819, bytes: 10899179 } );
+      files.cache.set('file1', { md5: "0c9f74b0876cbb3ff8c86e0ea2b1fe45", key: "file.txt", lastmodified: 1685107819, bytes: 10899179 } );
 
       const { objectsToDeleteTarget, objectsToUploadTarget, objectsToUploadSource, objectsToDeleteSource } = logic.computeSync(files, helper.MODES.BI, false);
 
       assert.strictEqual(objectsToDeleteSource.length, 0);
       assert.strictEqual(objectsToDeleteTarget.length, 0);
       assert.strictEqual(objectsToUploadTarget.length, 0);
-      /** The target copy is pushed back to the source although the content is identical */
-      assert.strictEqual(objectsToUploadSource.length, 1);
-      assert.strictEqual(objectsToUploadSource[0]?.md5, "0c9f74b0876cbb3ff8c86e0ea2b1fe45");
+      assert.strictEqual(objectsToUploadSource.length, 0);
+    });
+
+    it('should sync a multipart-etag file uploaded again after the copy (newest wins)', function() {
+      files.source.set('file1', { md5: "a55b475be5fc06d42e1baf84231253ce-2", key: "file.txt", lastmodified: 1685107900, bytes: 10899179 } );
+      files.target.set('file1', { md5: "0c9f74b0876cbb3ff8c86e0ea2b1fe45", key: "file.txt", lastmodified: 1685107819, bytes: 10899179 } );
+      files.cache.set('file1', { md5: "0c9f74b0876cbb3ff8c86e0ea2b1fe45", key: "file.txt", lastmodified: 1685107819, bytes: 10899179 } );
+
+      const { objectsToUploadTarget, objectsToUploadSource } = logic.computeSync(files, helper.MODES.BI, false);
+
+      assert.strictEqual(objectsToUploadTarget.length, 1);
+      assert.strictEqual(objectsToUploadTarget[0]?.md5, "a55b475be5fc06d42e1baf84231253ce-2");
+      assert.strictEqual(objectsToUploadSource.length, 0);
+    });
+  });
+
+  describe("Multipart etags", function() {
+    const MULTIPART_MD5 = "b62e2a390d253298e9f061541ec39fc6-2";
+    const COPY_MD5 = "0c9f74b0876cbb3ff8c86e0ea2b1fe45";
+
+    it('should detect multipart etags', function() {
+      assert.strictEqual(logic.isMultipartEtag(MULTIPART_MD5), true);
+      assert.strictEqual(logic.isMultipartEtag("B62E2A390D253298E9F061541EC39FC6-10000"), true);
+      assert.strictEqual(logic.isMultipartEtag(COPY_MD5), false);
+      assert.strictEqual(logic.isMultipartEtag("file-2"), false);
+      assert.strictEqual(logic.isMultipartEtag(undefined), false);
+    });
+
+    it('should not re-upload on every run the copy of a multipart source file (unidirectional)', function() {
+      files.source.set('file1', { md5: MULTIPART_MD5, key: "file1", lastmodified: 1760040726000, bytes: 10899179 } );
+      files.target.set('file1', { md5: COPY_MD5, key: "file1", lastmodified: 1760040800000, bytes: 10899179 } );
+
+      const { objectsToUploadTarget, objectsToDeleteTarget } = logic.computeSync(files, helper.MODES.UNI, true);
+
+      assert.strictEqual(objectsToUploadTarget.length, 0);
+      assert.strictEqual(objectsToDeleteTarget.length, 0);
+    });
+
+    it('should consider files identical if a copy has a multipart etag and the original the real md5', function() {
+      files.source.set('file1', { md5: COPY_MD5, key: "file1", lastmodified: 1760040726000, bytes: 10899179 } );
+      files.target.set('file1', { md5: MULTIPART_MD5, key: "file1", lastmodified: 1760040700000, bytes: 10899179 } );
+
+      const { objectsToUploadTarget } = logic.computeSync(files, helper.MODES.UNI, true);
+
+      assert.strictEqual(objectsToUploadTarget.length, 0);
+    });
+
+    it('should upload a multipart source file uploaded again after the copy', function() {
+      files.source.set('file1', { md5: MULTIPART_MD5, key: "file1", lastmodified: 1760040900000, bytes: 10899179 } );
+      files.target.set('file1', { md5: COPY_MD5, key: "file1", lastmodified: 1760040800000, bytes: 10899179 } );
+
+      const { objectsToUploadTarget } = logic.computeSync(files, helper.MODES.UNI, true);
+
+      assert.strictEqual(objectsToUploadTarget.length, 1);
+    });
+
+    it('should upload a multipart source file if the size is different', function() {
+      files.source.set('file1', { md5: MULTIPART_MD5, key: "file1", lastmodified: 1760040726000, bytes: 10899179 } );
+      files.target.set('file1', { md5: COPY_MD5, key: "file1", lastmodified: 1760040800000, bytes: 10899180 } );
+
+      const { objectsToUploadTarget } = logic.computeSync(files, helper.MODES.UNI, true);
+
+      assert.strictEqual(objectsToUploadTarget.length, 1);
+    });
+
+    it('should upload a multipart source file if the size is unknown', function() {
+      files.source.set('file1', { md5: MULTIPART_MD5, key: "file1", lastmodified: 1760040726000 } );
+      files.target.set('file1', { md5: COPY_MD5, key: "file1", lastmodified: 1760040800000 } );
+
+      const { objectsToUploadTarget } = logic.computeSync(files, helper.MODES.UNI, true);
+
+      assert.strictEqual(objectsToUploadTarget.length, 1);
+    });
+
+    it('should upload if both etags are multipart but different (no way to compare the content)', function() {
+      files.source.set('file1', { md5: MULTIPART_MD5, key: "file1", lastmodified: 1760040726000, bytes: 10899179 } );
+      files.target.set('file1', { md5: "a55b475be5fc06d42e1baf84231253ce-3", key: "file1", lastmodified: 1760040800000, bytes: 10899179 } );
+
+      const { objectsToUploadTarget } = logic.computeSync(files, helper.MODES.UNI, true);
+
+      assert.strictEqual(objectsToUploadTarget.length, 1);
+    });
+
+    it('should not upload if both multipart etags are identical', function() {
+      files.source.set('file1', { md5: MULTIPART_MD5, key: "file1", lastmodified: 1760040726000, bytes: 10899179 } );
+      files.target.set('file1', { md5: MULTIPART_MD5, key: "file1", lastmodified: 1760040800000, bytes: 10899179 } );
+
+      const { objectsToUploadTarget } = logic.computeSync(files, helper.MODES.UNI, true);
+
+      assert.strictEqual(objectsToUploadTarget.length, 0);
     });
   });
 

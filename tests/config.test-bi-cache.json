@@ -4,6 +4,7 @@
   "delete": true,
   "cacheFilename": "tests/test-bi.cache.json",
   "integrityCheck": false,
+  "listRetryDelay": 1,
   "source": {
     "name": "s3",
     "accessKeyId": "access-key-id",

@@ -92,6 +92,8 @@ At the root of the project, copy the `config.default.json` and name it `config.j
 | **cacheFilename** | `"listFiles.cache.json"` | File name of the cache, it is keeping the list of files synchronised during `bidirectional` mode only. The JSON file is created automatically in the current working directory (the directory the program is started from). An absolute path can also be provided. |
 | **transfers** | `15` | Number of file operations to run in parallel: upload/deletion. If a storage responds with many errors (status 500, socket or authentication error), consider reducing the number of transfers. |
 | **retry** | `1` | Max number of retries to sync a file. |
+| **listRetry** | `5` | Max number of retries of a listing page on a temporary error (network, status 5xx, 408, 429, page cut or invalid). Only the failed page is requested again, not the whole listing. A permanent error (access denied, bucket not found) is not retried. If a page still fails, the synchronisation is stopped before any operation. |
+| **listRetryDelay** | `1000` | Delay in milliseconds before the first retry of a listing page, doubled on each retry: 1s, 2s, 4s, 8s, 16s by default. |
 | **dryRun** | `false` | Do a trial run with no permanent changes, a JSON file is created including all file operations. |
 | **maxDeletion** |  | Max number of deletions allowed during a file synchronisation. If the threshold is reached, the process is terminated before deleting anything. It is a security measure to avoid propagation of unexpected bulk deletions. |
 
@@ -177,6 +179,17 @@ The file resolution is not based on the `source` but both storages. Sclone compa
 For the first synchronisation, even if the `deletion` option is enabled, it won't delete anything. It will make sure the source and target are synchronised. If a file does not exist on one storage, it will be pushed into the other storage, and vice-versa. Finally, a cache of the list of synchronised files is created (named `listFiles.cache.json` by default).
 
 For all subsequent synchronisations, Sclone will use the cache as the source of truth of the previous synchronisation to determine new, edited, or deleted files. If the cache is deleted, it will be considered a first synchronisation; it won't delete anything and will create a new cache. If a synchronisation ends with transfer errors, the cache is not updated: the failed files are retried on the next run.
+
+### S3 multipart files
+
+The S3 etag of a file uploaded with a multipart upload is not the MD5 of its content (format `<hash>-<number of parts>`). Sclone copies files with a single upload, so the copy always gets the real MD5, and the two etags never match.
+
+When only one of the two versions has a multipart etag, both modes consider the files identical if they have the same size and the multipart version is not newer than the other one (the copy is always created after the original). Consequences:
+- A multipart version uploaded again after the copy is synchronised, even with the same size.
+- A content change that keeps the exact same size, made on the non-multipart version only, is not detected until one of the files is modified again.
+- When both etags are multipart but different, the content cannot be compared: the file is synchronised.
+
+With `integrityCheck`, the downloaded content of a multipart file cannot be checked against its etag: the check is skipped for these files. The upload is still verified by the storage with the `Content-MD5` header (S3) or the `ETag` header (SWIFT).
 
 ## Development
 
