@@ -2,6 +2,7 @@ const storageClient = require("tiny-storage-client");
 const cqueue = require('@carboneio/cqueue');
 const { execQueue } = cqueue;
 const crypto = require('crypto');
+const { isUtf8 } = require('buffer');
 const helper = require("./helper");
 const logger = require("./logger");
 const { isMultipartEtag, isMd5 } = require("./logic");
@@ -722,8 +723,7 @@ function decodeRawUtf8 (value) {
     return value;
   }
   const _bytes = Buffer.from(value, 'latin1');
-  const _decoded = _bytes.toString('utf8');
-  return Buffer.from(_decoded, 'utf8').equals(_bytes) === true ? _decoded : value;
+  return isUtf8(_bytes) === true ? _bytes.toString('utf8') : value;
 }
 
 // /** Generate an MD5 hash from a data */

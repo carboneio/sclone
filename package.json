@@ -21,7 +21,7 @@
     "test": "mocha ./tests",
     "lint": "eslint --fix",
     "bench": "node ./benchmarks/init.js",
-    "build": "pkg -t latest-linux-x64,latest-macos-x64 -o sclone-$npm_package_version ."
+    "build": "pkg -t node26-linux-x64,node26-macos-x64 -o sclone-$npm_package_version ."
   },
   "repository": {
     "type": "git",
@@ -54,7 +54,7 @@
     "access": "public"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=26"
   },
   "dependencies": {
     "@carboneio/cqueue": "1.1.0",

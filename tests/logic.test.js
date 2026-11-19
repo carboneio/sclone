@@ -29,7 +29,8 @@ function entriesOf (files) {
     const _source = files.source.get(key);
     const _target = files.target.get(key);
     if (logic.hasCache(_source, _target) === true) {
-      _entries[key] = [_source?.cachedEtag ?? null, _source?.cachedBytes ?? null, _target?.cachedEtag ?? null, _target?.cachedBytes ?? null];
+      /** defineProperty: a key named `__proto__` must be an own entry, not the prototype of the object (Node 20 compares prototypes) */
+      Object.defineProperty(_entries, key, { value: [_source?.cachedEtag ?? null, _source?.cachedBytes ?? null, _target?.cachedEtag ?? null, _target?.cachedBytes ?? null], enumerable: true, writable: true, configurable: true });
     }
   }
   return _entries;

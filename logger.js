@@ -90,7 +90,7 @@ function jsonReplacer (_key, value) {
   if (typeof value === 'function') {
     return '[function]';
   }
-  return value instanceof Error ? { message: value.message, code: value.code } : value;
+  return Error.isError(value) === true ? { message: value.message, code: value.code } : value;
 }
 
 function escapeChar (char) {
@@ -140,7 +140,7 @@ function formatValue (value, redact = true) {
     _str = value;
   } else if (typeof value === 'function') {
     _str = '[function]';
-  } else if (value instanceof Error || typeof value !== 'object') {
+  } else if (Error.isError(value) === true || typeof value !== 'object') {
     _str = String(value);
   } else {
     /** Throws on a circular structure: caught by the caller */

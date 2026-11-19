@@ -60,7 +60,7 @@ chmod +x ./sclone-1.3.0-linux
 ./sclone-1.3.0-linux
 ```
 
-### Option 2: npm (requires Node.js 20 or higher)
+### Option 2: npm (requires Node.js 26 or higher)
 
 1. Install the [npm package](https://www.npmjs.com/package/@steevepay/sclone) globally:
 ```sh
@@ -256,7 +256,7 @@ A synchronisation without any change sends the listing requests only, plus the c
 
 ## Development
 
-Requires Node.js 20 or higher.
+Requires Node.js 26 or higher.
 
 ```sh
 npm install      # install dependencies
