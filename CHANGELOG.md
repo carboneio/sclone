@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file. This projec
 
 ## 2.0.0
 
+> ⚠️ **Requires Node.js 26 or later** (the release binaries embed Node 26). Uses the built-in `Error.isError()` and `buffer.isUtf8()`, with no change to the logs or the synchronisation.
+
 > ⚠️ **Upgrade from 1.x**: run a last 1.x synchronisation right before upgrading. The 1.x cache is migrated only from an explicit `cacheFilename` (never from the old default `listFiles.cache.json`); without it, the first 2.0 run is a first synchronisation: the files deleted since the last 1.x run reappear once (copied back from the other side). Nothing is lost.
 
 - ⚠️ **New bidirectional logic, never "the most recent wins" alone**: the cache now records the state of each side after the last synchronisation, and only the side that changed is propagated. Fixed data losses of 1.x:
