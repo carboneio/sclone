@@ -5,7 +5,7 @@
 # Sclone
 
 [![Tests](https://github.com/carboneio/sclone/actions/workflows/test.yml/badge.svg)](https://github.com/carboneio/sclone/actions/workflows/test.yml)
-[![npm version](https://img.shields.io/npm/v/@steevepay/sclone)](https://www.npmjs.com/package/@steevepay/sclone)
+[![npm version](https://img.shields.io/npm/v/@carboneio/sclone)](https://www.npmjs.com/package/@carboneio/sclone)
 
 Sclone, for "Storage Clone", is a program to sync files to and from different cloud storage providers supporting S3 and OpenStack SWIFT.
 
@@ -26,6 +26,8 @@ If you would like to know more about performance, refer to the [benchmarks](#ben
 - **Support any S3 and SWIFT provider**:  AWS S3, OVHCloud, Scaleway, Ceph.io,  DigitalOcean Spaces, Cloudflare R2, Seagate Lyve Cloud, Tencent Cloud, Alibaba Cloud OSS, IBM COS S3, Dreamhost S3, GCS, IDrive e2, Synology C2, IONOS Cloud, Minio, Petabox, and more...
 
 ## Benchmarks
+
+The transfer benchmarks below were measured with sclone 1.0.0 and have not been run again with 2.0. With 2.0, a synchronisation without any change of 100 000 files takes about 3.9 s on a local MinIO, and the plan of 350 000 files is computed in about 50 ms.
 
 > * Environment: VPS OVH - 2 vCores - 4GB Ram - Bandwidth 500Mbit/s - Debian 12 - Node 20.5.1 - Strasbourg (France)
 > * Default options were used for sclone (1.0.0) / rclone (v1.63.1) / s3sync (2.61)
@@ -50,21 +52,21 @@ Bidirectional sync between two storages located in different regions. Every sync
 
 ### Option 1: Standalone binary
 
-1. Download the latest binary from the [Release page](https://github.com/carboneio/sclone/releases) and make it executable:
+1. Download the latest binary for Linux (`sclone-<version>-linux`) or macOS (`sclone-<version>-macos`) from the [Release page](https://github.com/carboneio/sclone/releases) and make it executable:
 ```sh
-chmod +x ./sclone-1.3.0-linux
+chmod +x ./sclone-2.0.0-linux
 ```
-2. Create a file `config.json` near the binary to define the source/target storage credentials, and options. You can copy the `config.default.json` file as an example. Read the [configuration](#configuration) section for details.
-3. Finally start the synchronisation. 
+2. Create a file `config.json` in the directory you will run the binary from to define the source/target storage credentials, and options. You can copy the `config.default.json` file as an example. Read the [configuration](#configuration) section for details.
+3. Finally start the synchronisation:
 ```sh
-./sclone-1.3.0-linux
+./sclone-2.0.0-linux
 ```
 
 ### Option 2: npm (requires Node.js 26 or higher)
 
-1. Install the [npm package](https://www.npmjs.com/package/@steevepay/sclone) globally:
+1. Install the [npm package](https://www.npmjs.com/package/@carboneio/sclone) globally:
 ```sh
-npm install -g @steevepay/sclone
+npm install -g @carboneio/sclone
 ```
 2. Create a `config.json` file in the directory you will run sclone from (see the [configuration](#configuration) section).
 3. Start the synchronisation:
@@ -72,11 +74,11 @@ npm install -g @steevepay/sclone
 sclone
 ```
 
-> 🟢 Tip: Set the option `"dryRun":true` on the `config.json`, it will output on a log file what operations will be performed without actually carrying out those operations.
+> 🟢 Tip: Set the option `"dryRun": true` in the `config.json`: it writes the operations that would be performed into a JSON file of the `logs` folder, without carrying them out.
 
 ## Configuration
 
-At the root of the project, copy the `config.default.json` and name it `config.json`.
+Copy the `config.default.json` (from the repository or the npm package) to a `config.json` file in the working directory, or set its path with `SCLONE_CONFIG` (see [Environment variables](#environment-variables)). The file must be plain JSON: remove the comments of the examples below.
 
 ### List of options
 
@@ -88,13 +90,13 @@ At the root of the project, copy the `config.default.json` and name it `config.j
 | **cron** |  | Define the period of the program execution, and must follow the CRON syntax, for instance every minute: `"*/1 * * * *"`. A new process is not started until the current synchronisation is finished. If the option is not defined, the synchronisation is executed immediately, one time. |
 | **delete** | `false` | If `true`, files are deleted according to the synchronization mode logic. |
 | **integrityCheck** | `false` | If `true`, MD5 hashes are checked for file integrity. |
-| **logSync** | `false` | If `true`, at the end of each synchronisation, a JSON file is created including all file operations. |
+| **logSync** | `false` | If `true`, at the end of each synchronisation, a JSON file including all file operations is created in the `logs` folder of the working directory (`sync-<date>.json`). |
 | **cacheFilename** | `"sclone-<mode>-<hash>.cache.json"` | File name of the cache: the state of each file after the last synchronisation, written in both modes, unidirectional included (see [Cache](#cache)). By default the name is derived from the mode and the two storages (and their accounts), so several instances can share a working directory. The file is created in the current working directory (the directory the program is started from). An absolute path can also be provided. The lock file is created in the same directory: when the same pair of storages may run from several working directories, use an absolute path, otherwise each directory has its own cache and lock and the runs are not excluded. |
 | **transfers** | `15` | Number of file operations to run in parallel: upload/deletion. If a storage responds with many errors (status 500, socket or authentication error), consider reducing the number of transfers. |
-| **retry** | `1` | Max number of retries to sync a file. |
+| **retry** | `1` | Max number of retries to sync a file. `0` is read as `1`. |
 | **listRetry** | `5` | Max number of retries of a listing page on a temporary error (network, status 5xx, 408, 429, page cut or invalid). Only the failed page is requested again, not the whole listing. A permanent error (access denied, bucket not found) is not retried. If a page still fails, the synchronisation is stopped before any operation. |
 | **listRetryDelay** | `1000` | Delay in milliseconds before the first retry of a listing page, doubled on each retry: 1s, 2s, 4s, 8s, 16s by default. |
-| **dryRun** | `false` | Do a trial run with no permanent changes, a JSON file is created including all file operations. |
+| **dryRun** | `false` | Do a trial run with no permanent changes: a JSON file including all file operations is created, as with `logSync`. The cache is not saved. |
 | **maxDeletion** |  | Max number of deletions allowed on each storage during a synchronisation: up to `maxDeletion` files are deleted. Above it, no file is deleted on either storage, the uploads still run, and the synchronisation ends as failed (`deletion_refused reason=max_deletion`). It is a security measure to avoid propagation of unexpected bulk deletions. Not set or `0`: no limit. |
 | **allowEmptySide** | `false` | By default, no file is deleted when a storage is empty while files would be deleted on the other one: listed empty, or none of its listed files was synchronised before (emptied, then refilled with new files). Nothing is uploaded to the empty side and the cache is not saved (it stays empty, so the next runs keep refusing). Checked in both modes, together with `maxDeletion`. The other uploads still run, and the synchronisation ends as failed (`deletion_refused reason=empty_side`). An emptied, wrong or unreadable bucket must not wipe the other side. Set `true` to allow it. |
 | **name** | name of the working directory | Name of the instance, written in the `job` field of every log line. Give a distinct name to each instance, without spaces. Overridden by the `SCLONE_NAME` environment variable. |
@@ -143,7 +145,9 @@ At the root of the project, copy the `config.default.json` and name it `config.j
     "username": "", /** Your username **/
     "password": "", /** Your password **/
     "region"  : "", /** Bucket region **/
-    "bucket"  : ""  /** Bucket name that will be synchronised **/
+    "bucket"  : "", /** Bucket name that will be synchronised **/
+    "tenantName": "", /** Optional: project (tenant) name to scope the authentication **/
+    "interface" : ""  /** Optional: endpoint interface of the catalog ("public", "internal"...), the first endpoint of the region otherwise **/
 }
 ```
 
@@ -152,7 +156,7 @@ At the root of the project, copy the `config.default.json` and name it `config.j
 ```jsonc
 {
     "name"           : "s3",  /** Required by Sclone **/
-    "url"            : "s3.gra.first.cloud.test", /** S3 URL, without the bucket name, and without "https://" **/
+    "url"            : "s3.gra.first.cloud.test", /** S3 URL, without the bucket name ("https://" is optional) **/
     "accessKeyId"    : "",    /** Your access key ID **/
     "secretAccessKey": "",    /** Your secret key **/
     "region"         : "",    /** Bucket region **/
@@ -164,7 +168,7 @@ At the root of the project, copy the `config.default.json` and name it `config.j
 
 | Variable | Description |
 |---|---|
-| **SCLONE_CONFIG** | Path to the configuration file (filename or absolute path). Defaults to `config.json`. |
+| **SCLONE_CONFIG** | Path to the configuration file, relative to the working directory or absolute. Defaults to `config.json`. |
 | **SCLONE_CRON** | Cron expression, overrides the `cron` option of the configuration file. |
 | **SCLONE_NAME** | Name of the instance in the logs (`job` field), overrides the `name` option. |
 | **SCLONE_LOG_LEVEL** | Minimum level of the logs (`debug`, `info`, `warn`, `error`), overrides the `logLevel` option. |
@@ -184,10 +188,10 @@ ts=2026-11-19T09:57:25.089Z level=info job=backup-invoices run=089a9f5b event=sy
 - The `sync_end` line ends every synchronisation with its `status` (`success`, `failed`, `dry_run`, `interrupted`), its duration, the number of files and bytes transferred, the number of failures and the size of both buckets. The `transfer_failed` lines give the cause of each failed operation: key, HTTP status and error.
 - Levels: `info` by default. A synchronisation without any change writes 4 lines with a `cron`. Use `"logLevel": "debug"` to see the cache and queue details, `"warn"` to only keep the problems.
 - Credentials are never logged. Object keys are.
-- The process exits with code `1` on a configuration error or a failed synchronisation (without `cron`).
+- The process exits with code `0` on success, and `1` on a configuration error, a storage connection failure at startup or a failed synchronisation (without `cron`).
 - On `SIGTERM` (`systemctl stop` or `restart`) or `SIGINT` (Ctrl+C) during a run, sclone writes `sync_end status=interrupted` with the transfers done so far, releases its lock and exits with code `143` (`SIGTERM`) or `130` (`SIGINT`); the cache of the interrupted run is not saved, the previous one is kept. Between two `cron` runs it writes a single `shutdown` line. A second signal exits at once.
 
-The list of events and fields, LogQL queries, alerts and a Grafana dashboard are available in [docs/grafana.md](docs/grafana.md).
+The list of events and fields, LogQL queries and alerts are available in [docs/grafana.md](docs/grafana.md), with a ready-to-import Grafana dashboard: [docs/grafana-dashboard.json](docs/grafana-dashboard.json).
 
 ### Running several instances
 

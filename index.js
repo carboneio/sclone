@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 const sclone = require('./sclone');
 
 /** The cause is already logged by sclone (config_error, storage_connect_failed, sync_end...) */

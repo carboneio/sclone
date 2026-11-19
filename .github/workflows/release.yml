@@ -71,7 +71,7 @@ jobs:
     permissions:
       contents: read
       # Required by npm Trusted Publishing (OIDC): configure this repository and workflow as a
-      # trusted publisher on https://www.npmjs.com/package/@steevepay/sclone/access
+      # trusted publisher on https://www.npmjs.com/package/@carboneio/sclone/access
       id-token: write
     steps:
       - name: Checkout

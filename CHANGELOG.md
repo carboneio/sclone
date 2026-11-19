@@ -33,6 +33,7 @@ All notable changes to this project will be documented in this file. This projec
 - ⚠️ **No more error files by default**: the causes are in the logs. Use `"errorFile": true` or `"final"` to keep them; they are deleted after `logRetentionDays` (default 7).
 - New options: `allowEmptySide`, `name`, `logLevel`, `logMaxFailures`, `errorFile`, `logRetentionDays`, `retryDelay`; environment variables `SCLONE_NAME` and `SCLONE_LOG_LEVEL`.
 - Fixed S3 ↔ Swift metadata conversion: only headers *starting* with the metadata prefix are converted.
+- Fixed the `sclone` command installed by `npm install -g`: `index.js` had no `#!/usr/bin/env node` line, so Linux and macOS could not run it.
 - Faster start: the source and the target connect in parallel (about one Swift authentication saved per run). If both fail, the source error is still reported first.
 - Updated dependencies: `tiny-storage-client` 4.0.0, `@carboneio/cqueue` 1.1.0.
 
