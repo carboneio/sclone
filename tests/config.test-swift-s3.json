@@ -1,5 +1,6 @@
 {
   "test": true,
+    "retryDelay": 0,
   "mode": "bidirectional",
   "cacheFilename": "listFiles.cache.json",
   "cron": "*/5 * * * *",

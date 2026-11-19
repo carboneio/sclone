@@ -1,0 +1,2571 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_LOKI",
+      "label": "Loki",
+      "description": "Loki datasource receiving the sclone logs",
+      "type": "datasource",
+      "pluginId": "loki",
+      "pluginName": "Loki"
+    }
+  ],
+  "__requires": [
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "10.0.0"
+    },
+    {
+      "type": "datasource",
+      "id": "loki",
+      "name": "Loki",
+      "version": "1.0.0"
+    }
+  ],
+  "title": "Sclone — S3/Swift synchronisation",
+  "description": "Health, errors, performance and buckets of the sclone synchronisations, from the logfmt logs shipped to Loki. Hover the ⓘ of each panel: what it measures, the normal value and what to do.",
+  "uid": "sclone",
+  "tags": [
+    "sclone",
+    "loki"
+  ],
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "editable": true,
+  "graphTooltip": 1,
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "refresh": "5m",
+  "links": [
+    {
+      "title": "Documentation (grafana.md)",
+      "type": "link",
+      "icon": "doc",
+      "tooltip": "sclone events, fields, queries and alerts",
+      "url": "https://github.com/carboneio/sclone/blob/master/docs/grafana.md",
+      "targetBlank": true,
+      "asDropdown": false,
+      "includeVars": false,
+      "keepTime": false,
+      "tags": []
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "selector",
+        "label": "Loki stream selector",
+        "type": "textbox",
+        "query": "{unit=~\"sclone.*\"}",
+        "current": {
+          "text": "{unit=~\"sclone.*\"}",
+          "value": "{unit=~\"sclone.*\"}"
+        },
+        "description": "Stream selector of the sclone logs, e.g. {unit=~\"sclone.*\"} or {host=\"my-server\"}"
+      },
+      {
+        "name": "job",
+        "label": "Job (regex)",
+        "type": "textbox",
+        "query": ".*",
+        "current": {
+          "text": ".*",
+          "value": ".*"
+        },
+        "description": "Regex on the logfmt field job (configuration \"name\" / SCLONE_NAME)"
+      },
+      {
+        "name": "event",
+        "label": "Event (regex, logs)",
+        "type": "textbox",
+        "query": ".*",
+        "current": {
+          "text": ".*",
+          "value": ".*"
+        },
+        "description": "Regex on the event field, applied to the Error and warning logs panel, e.g. deletion_refused or transfer_failed|sync_skipped"
+      }
+    ]
+  },
+  "annotations": {
+    "list": [
+      {
+        "name": "Failed runs",
+        "datasource": {
+          "type": "loki",
+          "uid": "${DS_LOKI}"
+        },
+        "enable": true,
+        "hide": false,
+        "iconColor": "red",
+        "expr": "${selector} |= \"event=sync_end\" | logfmt | event=\"sync_end\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" | status=\"failed\"",
+        "instant": false,
+        "tagKeys": "sclone_job",
+        "titleFormat": "Failed run {{sclone_job}}",
+        "textFormat": "{{error}}"
+      },
+      {
+        "name": "Refused deletions",
+        "datasource": {
+          "type": "loki",
+          "uid": "${DS_LOKI}"
+        },
+        "enable": true,
+        "hide": false,
+        "iconColor": "orange",
+        "expr": "${selector} |= \"event=deletion_refused\" | logfmt | event=\"deletion_refused\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\"",
+        "instant": false,
+        "tagKeys": "sclone_job",
+        "titleFormat": "Deletion refused {{sclone_job}}: {{reason}}",
+        "textFormat": "{{msg}}"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 100,
+      "type": "row",
+      "title": "🟢 Health",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 1,
+      "title": "Last run status",
+      "description": "**What it measures**: the result of the last run of each job in the time range (`sync_end`, `dry_run` excluded).\n\n**Normal value**: **Success** (green) for every job.\n\n**When to worry / what to do**: a **Failed** (red) job: read the `error` field, open *Error and warning logs* filtered on `event=sync_end` (*Event* variable). A missing job ran nothing in the range: check its service (cron, systemd unit).",
+      "type": "stat",
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 5,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "last_over_time(${selector} |= \"event=sync_end\" | logfmt | event=\"sync_end\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" | status!=\"dry_run\" | label_format ok=`{{ if eq .status \"success\" }}1{{ else }}0{{ end }}` | unwrap ok | __error__=\"\" [$__range]) by (sclone_job)",
+          "legendFormat": "{{sclone_job}}",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Failed",
+                  "color": "red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "Success",
+                  "color": "green",
+                  "index": 1
+                }
+              }
+            }
+          ],
+          "noValue": "No run",
+          "displayName": "${__data.fields.sclone_job}"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Time since last success",
+      "description": "**What it measures**: the time elapsed between the end of the time range and the last successful run of each job (`sync_end status=success`).\n\n**Normal value**: about the cron interval. The thresholds (orange 15 min, red 1 h) fit a cron every few minutes: **adjust them** to your schedule.\n\n**When to worry / what to do**: red: the job has not synchronised for too long, even if some runs ran. Check *Last run status*, then *Top errors*. *No success* means no successful run in the whole range.",
+      "type": "stat",
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "gridPos": {
+        "x": 5,
+        "y": 1,
+        "w": 5,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "${__to:date:seconds} - max by (sclone_job) (max_over_time(${selector} |= \"event=sync_end\" | logfmt | event=\"sync_end\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" | status=\"success\" | label_format success_at=`{{ __timestamp__ | unixEpoch }}` | unwrap success_at | __error__=\"\" [$__range]))",
+          "legendFormat": "{{sclone_job}}",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 900
+              },
+              {
+                "color": "red",
+                "value": 3600
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "No success",
+                  "color": "red",
+                  "index": 0
+                }
+              }
+            }
+          ],
+          "noValue": "No success",
+          "decimals": 0,
+          "displayName": "${__data.fields.sclone_job}"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Success rate",
+      "description": "**What it measures**: the share of successful runs in the time range, per job (`sync_end status=success` / all runs except `dry_run`).\n\n**Normal value**: 100 %. Green ≥ 99 %, orange ≥ 95 %, red below.\n\n**When to worry / what to do**: compare with *Success rate per job* to date the drop, then read *Top errors* and *Failures by HTTP status*.",
+      "type": "stat",
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "gridPos": {
+        "x": 10,
+        "y": 1,
+        "w": 5,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "(sum by (sclone_job) (count_over_time(${selector} |= \"event=sync_end\" | logfmt | event=\"sync_end\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" | status=\"success\" [$__range])) / sum by (sclone_job) (count_over_time(${selector} |= \"event=sync_end\" | logfmt | event=\"sync_end\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" | status!=\"dry_run\" [$__range]))) or on(sclone_job) (0 * sum by (sclone_job) (count_over_time(${selector} |= \"event=sync_end\" | logfmt | event=\"sync_end\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" | status!=\"dry_run\" [$__range])))",
+          "legendFormat": "{{sclone_job}}",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.95
+              },
+              {
+                "color": "green",
+                "value": 0.99
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "noValue": "No run",
+          "min": 0,
+          "max": 1,
+          "decimals": 1,
+          "displayName": "${__data.fields.sclone_job}"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Runs",
+      "description": "**What it measures**: the number of runs in the time range by result (`sync_end status`), and the skipped cron ticks (`sync_skipped`).\n\n**Normal value**: only successes; 0 failed, 0 interrupted, 0 skipped.\n\n**When to worry / what to do**: **Failed**: see *Last run status* and *Top errors*. **Interrupted**: the process was stopped during a run (`SIGTERM` of `systemctl stop`/`restart`, `SIGINT`), field `signal`; expected during a deployment, otherwise check who stops the service. **Skipped**: see *Skipped runs by reason* (run longer than the cron interval, lock held by another process).",
+      "type": "stat",
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "gridPos": {
+        "x": 15,
+        "y": 1,
+        "w": 5,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "sum(count_over_time(${selector} |= \"event=sync_end\" | logfmt | event=\"sync_end\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" | status=\"success\" [$__range])) or vector(0)",
+          "legendFormat": "Success",
+          "queryType": "instant"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "sum(count_over_time(${selector} |= \"event=sync_end\" | logfmt | event=\"sync_end\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" | status=\"failed\" [$__range])) or vector(0)",
+          "legendFormat": "Failed",
+          "queryType": "instant"
+        },
+        {
+          "refId": "E",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "sum(count_over_time(${selector} |= \"event=sync_end\" | logfmt | event=\"sync_end\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" | status=\"interrupted\" [$__range])) or vector(0)",
+          "legendFormat": "Interrupted",
+          "queryType": "instant"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "sum(count_over_time(${selector} |= \"event=sync_end\" | logfmt | event=\"sync_end\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" | status=\"dry_run\" [$__range])) or vector(0)",
+          "legendFormat": "Dry runs",
+          "queryType": "instant"
+        },
+        {
+          "refId": "D",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "sum(count_over_time(${selector} |= \"event=sync_skipped\" | logfmt | event=\"sync_skipped\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" [$__range])) or vector(0)",
+          "legendFormat": "Skipped",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "noValue": "0"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Success"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Failed"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "E"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Interrupted"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "C"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Dry runs"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "blue",
+                      "value": null
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "D"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Skipped"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Refused deletions",
+      "description": "**What it measures**: the deletion refusals in the time range (`deletion_refused`): `maxDeletion` exceeded, empty side, or Swift container with `X-Versions-Location`. Uploads still run, the run fails.\n\n**Normal value**: 0.\n\n**When to worry / what to do**: any value > 0 is red: the refused deletions were not done. See *Refused deletions by reason*, then open *Error and warning logs* filtered on `event=deletion_refused` (*Event* variable). Check the storage before raising `maxDeletion` or enabling `allowEmptySide`.",
+      "type": "stat",
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 1,
+        "w": 4,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "sum(count_over_time(${selector} |= \"event=deletion_refused\" | logfmt | event=\"deletion_refused\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" [$__range])) or vector(0)",
+          "legendFormat": "Refusals",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "noValue": "0"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Refusals"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Success rate per job",
+      "description": "**What it measures**: the success rate per 15 min slot and per job (`dry_run` excluded).\n\n**Normal value**: a flat line at 100 %. The dashed lines mark 99 % and 95 %.\n\n**When to worry / what to do**: a lasting drop below 95 %: read *Failures by HTTP status* and *Top errors* over the same period.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 6,
+        "w": 12,
+        "h": 8
+      },
+      "interval": "15m",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "(sum by (sclone_job) (count_over_time(${selector} |= \"event=sync_end\" | logfmt | event=\"sync_end\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" | status=\"success\" [$__interval])) / sum by (sclone_job) (count_over_time(${selector} |= \"event=sync_end\" | logfmt | event=\"sync_end\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" | status!=\"dry_run\" [$__interval]))) or on(sclone_job) (0 * sum by (sclone_job) (count_over_time(${selector} |= \"event=sync_end\" | logfmt | event=\"sync_end\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" | status!=\"dry_run\" [$__interval])))",
+          "legendFormat": "{{sclone_job}}",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "auto",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.95
+              },
+              {
+                "color": "green",
+                "value": 0.99
+              }
+            ]
+          },
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "title": "Skipped runs by reason",
+      "description": "**What it measures**: the cron ticks not run (`sync_skipped`) by reason: previous run still running (`already_running`), lock held by another process (`locked`), lock file cannot be created (`lock_error`).\n\n**Normal value**: 0. A few isolated `already_running` are acceptable after an unusually long run.\n\n**When to worry / what to do**: repeated `already_running`: runs last longer than the cron interval, space the cron or see *Run duration*. `locked`: another sclone synchronises the same storages, see *Blocking lock age*. `lock_error`: the lock directory is missing or read-only.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 6,
+        "w": 12,
+        "h": 8
+      },
+      "interval": "15m",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "sum by (sclone_job) (count_over_time(${selector} |= \"event=sync_skipped\" | logfmt | event=\"sync_skipped\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" | reason=\"already_running\" [$__interval]))",
+          "legendFormat": "Previous run still running {{sclone_job}}",
+          "queryType": "range"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "sum by (sclone_job) (count_over_time(${selector} |= \"event=sync_skipped\" | logfmt | event=\"sync_skipped\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" | reason=\"locked\" [$__interval]))",
+          "legendFormat": "Locked by another process {{sclone_job}}",
+          "queryType": "range"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "sum by (sclone_job) (count_over_time(${selector} |= \"event=sync_skipped\" | logfmt | event=\"sync_skipped\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" | reason=\"lock_error\" [$__interval]))",
+          "legendFormat": "Lock error {{sclone_job}}",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "off"
+            },
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/^Lock error/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 8,
+      "title": "Refused deletions by reason",
+      "description": "**What it measures**: the deletion refusals (`deletion_refused`) by reason: `max_deletion` (more deletions than `maxDeletion`), `empty_side` (a side listed empty), `swift_versions_stack` (Swift container with `X-Versions-Location`).\n\n**Normal value**: no bar.\n\n**When to worry / what to do**: `max_deletion`: confirm a mass deletion is intended before raising `maxDeletion`. `empty_side`: check the empty bucket (wrong bucket, permissions). `swift_versions_stack`: switch the container to `X-History-Location` or disable `delete`. Details: open *Error and warning logs* filtered on `event=deletion_refused` (*Event* variable).",
+      "type": "timeseries",
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 8,
+        "h": 8
+      },
+      "interval": "15m",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "sum by (sclone_job) (count_over_time(${selector} |= \"event=deletion_refused\" | logfmt | event=\"deletion_refused\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" | reason=\"max_deletion\" [$__interval]))",
+          "legendFormat": "maxDeletion exceeded {{sclone_job}}",
+          "queryType": "range"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "sum by (sclone_job) (count_over_time(${selector} |= \"event=deletion_refused\" | logfmt | event=\"deletion_refused\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" | reason=\"empty_side\" [$__interval]))",
+          "legendFormat": "Empty side {{sclone_job}}",
+          "queryType": "range"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "sum by (sclone_job) (count_over_time(${selector} |= \"event=deletion_refused\" | logfmt | event=\"deletion_refused\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" | reason=\"swift_versions_stack\" [$__interval]))",
+          "legendFormat": "Swift X-Versions-Location {{sclone_job}}",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "off"
+            },
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 9,
+      "title": "Postponed deletions",
+      "description": "**What it measures**: the files missing from a listing but not deleted from the other side (`deletion_skipped`, field `count`): still present on `HEAD` (`still_present`), or not confirmed (`not_confirmed`, counted as failed).\n\n**Normal value**: 0. A few `still_present` can appear when files are created during the listing.\n\n**When to worry / what to do**: `not_confirmed` > 0 fails the run: the `HEAD` failed after the retries, see *Failures by HTTP status*. Many `still_present`: incomplete listing on the storage side, open *Error and warning logs* filtered on `event=deletion_skipped` (*Event* variable).",
+      "type": "timeseries",
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 14,
+        "w": 8,
+        "h": 8
+      },
+      "interval": "15m",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "sum by (sclone_job) (sum_over_time(${selector} |= \"event=deletion_skipped\" | logfmt | event=\"deletion_skipped\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" | reason=\"still_present\" | unwrap count | __error__=\"\" [$__interval]))",
+          "legendFormat": "Still present {{sclone_job}}",
+          "queryType": "range"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "sum by (sclone_job) (sum_over_time(${selector} |= \"event=deletion_skipped\" | logfmt | event=\"deletion_skipped\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" | reason=\"not_confirmed\" | unwrap count | __error__=\"\" [$__interval]))",
+          "legendFormat": "Not confirmed {{sclone_job}}",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "off"
+            },
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/^Not confirmed/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 10,
+      "title": "Blocking lock age",
+      "description": "**What it measures**: the age of the process holding the lock when a tick is skipped (`sync_skipped reason=locked`, field `held_ms`).\n\n**Normal value**: no data: no other process holds the lock.\n\n**When to worry / what to do**: above 10 min (red line, the stale-lock delay) the tick is logged as `error`: the other process is stuck or very slow. Find its `pid`: open *Error and warning logs* filtered on `event=sync_skipped` (*Event* variable). An abandoned lock is taken over automatically (`lock_stale`).",
+      "type": "timeseries",
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 14,
+        "w": 8,
+        "h": 8
+      },
+      "interval": "15m",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "max by (sclone_job) (max_over_time(${selector} |= \"event=sync_skipped\" | logfmt | event=\"sync_skipped\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" | reason=\"locked\" | unwrap held_ms | __error__=\"\" [$__interval]))",
+          "legendFormat": "{{sclone_job}}",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "auto",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "line+area"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "orange",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 600000
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 101,
+      "type": "row",
+      "title": "🔴 Errors",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 22,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 11,
+      "title": "Failed files",
+      "description": "**What it measures**: the files that failed in the time range (sum of the `failed` field of `sync_end`): uploads, deletions and unconfirmed `HEAD` checks.\n\n**Normal value**: 0.\n\n**When to worry / what to do**: orange from 1, red from 100: read *Failures by HTTP status* (403 = permissions, 5xx = storage, no status = network) and *Top errors*.",
+      "type": "stat",
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 23,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "sum(sum_over_time(${selector} |= \"event=sync_end\" | logfmt | event=\"sync_end\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" | unwrap failed | __error__=\"\" [$__range])) or vector(0)",
+          "legendFormat": "Files",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 100
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "noValue": "0"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Files"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 12,
+      "title": "Files too large",
+      "description": "**What it measures**: the uploads refused because the file exceeds 5 GiB, the limit of a single upload (`transfer_failed reason=too_large`). Capped at `logMaxFailures` lines per queue and run.\n\n**Normal value**: 0.\n\n**When to worry / what to do**: any value > 0: these files will never be copied. List them in *Top errors* or open *Error and warning logs* filtered on `event=transfer_failed` (*Event* variable) (field `key`).",
+      "type": "stat",
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 23,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "sum(count_over_time(${selector} |= \"event=transfer_failed\" | logfmt | event=\"transfer_failed\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" | reason=\"too_large\" [$__range])) or vector(0)",
+          "legendFormat": "Files",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "noValue": "0"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Files"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 13,
+      "title": "Lock errors",
+      "description": "**What it measures**: the ticks skipped because the lock file cannot be created (`sync_skipped reason=lock_error`).\n\n**Normal value**: 0.\n\n**When to worry / what to do**: any value > 0 is red: no synchronisation happens. Check that the lock directory exists and is writable; exact message: open *Error and warning logs* filtered on `event=sync_skipped` (*Event* variable).",
+      "type": "stat",
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 23,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "sum(count_over_time(${selector} |= \"event=sync_skipped\" | logfmt | event=\"sync_skipped\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" | reason=\"lock_error\" [$__range])) or vector(0)",
+          "legendFormat": "Errors",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "noValue": "0"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Errors"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 14,
+      "title": "Cache errors and stale locks",
+      "description": "**What it measures**: the unusable caches (`cache_error`: unreadable, corrupted, written for other storages) and the abandoned locks taken over (`lock_stale`).\n\n**Normal value**: 0.\n\n**When to worry / what to do**: a `cache_error` makes the next run a first synchronisation (nothing is deleted because of it); if it repeats, check the disk and the cache path. A `lock_stale` means a sclone process stopped abruptly. Details: *Error and warning logs* filtered on `event=cache_error|lock_stale`.",
+      "type": "stat",
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 23,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "sum(count_over_time(${selector} |= \"event=cache_error\" | logfmt | event=\"cache_error\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" [$__range])) or vector(0)",
+          "legendFormat": "Unusable cache",
+          "queryType": "instant"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "sum(count_over_time(${selector} |= \"event=lock_stale\" | logfmt | event=\"lock_stale\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" [$__range])) or vector(0)",
+          "legendFormat": "Lock taken over",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "noValue": "0"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Unusable cache"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Lock taken over"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 15,
+      "title": "Failures by HTTP status",
+      "description": "**What it measures**: one bar per failed attempt (`transfer_failed`) by job, operation (`op`) and HTTP status (`status`). Capped at `logMaxFailures` lines per queue and run.\n\n**Normal value**: no bar.\n\n**When to worry / what to do**: 403: permissions or archived object; 404: object deleted after the listing; 5xx: storage unavailable; no status: network error (field `code`, e.g. `ECONNRESET`). See *Top errors* for the messages.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 28,
+        "w": 12,
+        "h": 8
+      },
+      "interval": "15m",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "sum by (sclone_job, op, status) (count_over_time(${selector} |= \"event=transfer_failed\" | logfmt | event=\"transfer_failed\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" [$__interval]))",
+          "legendFormat": "{{sclone_job}} {{op}} HTTP {{status}}",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "off"
+            },
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 16,
+      "title": "Connection and listing failures",
+      "description": "**What it measures**: the storage connections that failed (`storage_connect_failed`) and the listing pages requested again (`listing_retry`).\n\n**Normal value**: no bar.\n\n**When to worry / what to do**: a failed connection blocks the whole run: check credentials, endpoint and network. Repeated listing retries announce a slow or unstable storage: see *Listing duration p95*. Details: *Error and warning logs* filtered on `event=storage_connect_failed|listing_retry`.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 28,
+        "w": 12,
+        "h": 8
+      },
+      "interval": "15m",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "sum by (sclone_job, side) (count_over_time(${selector} |= \"event=storage_connect_failed\" | logfmt | event=\"storage_connect_failed\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" [$__interval]))",
+          "legendFormat": "Connection failed {{sclone_job}} {{side}}",
+          "queryType": "range"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "sum by (sclone_job, side, bucket) (count_over_time(${selector} |= \"event=listing_retry\" | logfmt | event=\"listing_retry\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" [$__interval]))",
+          "legendFormat": "Listing retried {{sclone_job}} {{side}} {{bucket}}",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "off"
+            },
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 17,
+      "title": "Top errors",
+      "type": "table",
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "description": "**What it measures**: the 20 most frequent transfer errors in the time range (`transfer_failed`), by job, operation, phase, HTTP status and message.\n\n**Normal value**: empty table.\n\n**When to worry / what to do**: fix the most frequent line first; the *Error* column gives the cause. For the keys involved, open *Error and warning logs* filtered on `event=transfer_failed` (*Event* variable).",
+      "gridPos": {
+        "x": 0,
+        "y": 36,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "topk(20, sum by (sclone_job, op, phase, status, error) (count_over_time(${selector} |= \"event=transfer_failed\" | logfmt | event=\"transfer_failed\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" [$__range])))",
+          "legendFormat": "",
+          "queryType": "instant"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "sclone_job": 0,
+              "op": 1,
+              "phase": 2,
+              "status": 3,
+              "error": 4,
+              "Value #A": 5
+            },
+            "renameByName": {
+              "sclone_job": "Job",
+              "op": "Operation",
+              "phase": "Phase",
+              "status": "HTTP status",
+              "error": "Error",
+              "Value #A": "Occurrences"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "Occurrences",
+                "desc": true
+              }
+            ]
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          },
+          "noValue": "No error"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Occurrences"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "custom.width",
+                "value": 120
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "orange",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 10
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "HTTP status"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": "-"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 18,
+      "title": "Top jobs by failed runs",
+      "type": "bargauge",
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "description": "**What it measures**: the 10 jobs with the most failed runs in the time range (`sync_end status=failed`).\n\n**Normal value**: empty.\n\n**When to worry / what to do**: start with the first job: *Last run status* tells if it is still failing, *Top errors* filtered with the *Job* variable gives the cause.",
+      "gridPos": {
+        "x": 0,
+        "y": 44,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "topk(10, sum by (sclone_job) (count_over_time(${selector} |= \"event=sync_end\" | logfmt | event=\"sync_end\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" | status=\"failed\" [$__range])))",
+          "legendFormat": "{{sclone_job}}",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "min": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "orange",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "noValue": "No failed run",
+          "displayName": "${__data.fields.sclone_job}"
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "namePlacement": "auto",
+        "sizing": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        }
+      },
+      "transformations": [
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "Value #A",
+                "desc": true
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "title": "Bidirectional conflicts",
+      "description": "**What it measures**: in bidirectional mode, the files changed on both sides (`sync_conflict`) by reason: `both_new`, `both_modified`, `deleted_modified`. At most 100 lines per run.\n\n**Normal value**: 0, or a few when both sides are edited at the same time. Always empty in unidirectional mode.\n\n**When to worry / what to do**: sclone keeps one version (field `winner`), the other one is overwritten: check the important files, open the logs filtered on `event=sync_conflict` (fields `key`, `winner`). Many conflicts after a first run without cache are expected.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 44,
+        "w": 12,
+        "h": 8
+      },
+      "interval": "15m",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "sum by (sclone_job, reason) (count_over_time(${selector} |= \"event=sync_conflict\" | logfmt | event=\"sync_conflict\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" [$__interval]))",
+          "legendFormat": "{{sclone_job}} {{reason}}",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "off"
+            },
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 20,
+      "title": "Error and warning logs",
+      "type": "logs",
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "description": "**What it measures**: the `level=error` and `level=warn` lines of the selected jobs, most recent first. The *Event* variable filters the `event` field (regex).\n\n**Normal value**: empty, or a few isolated warnings.\n\n**When to worry / what to do**: type an event in *Event* (e.g. `deletion_refused`, `transfer_failed`, `sync_skipped`) then expand a line to read its fields. To follow a whole run, copy its `run` id and search `run=<id>` in Explore.",
+      "gridPos": {
+        "x": 0,
+        "y": 52,
+        "w": 24,
+        "h": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "${selector} |~ \"level=(error|warn)\" | logfmt | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" | event=~\"${event}\"",
+          "legendFormat": "",
+          "queryType": "range"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "dedupStrategy": "none"
+      }
+    },
+    {
+      "id": 102,
+      "type": "row",
+      "title": "⏱️ Performance",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 62,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 21,
+      "title": "Run duration p50 / p95",
+      "description": "**What it measures**: the median (p50) and 95th percentile (p95) run duration per hour (`sync_end`, field `duration_ms`).\n\n**Normal value**: stable from day to day. The thresholds (orange 2 min, red 3 min) fit a cron every 3 minutes: **adjust them** to your cron interval.\n\n**When to worry / what to do**: a p95 close to the cron interval causes skipped runs (*Skipped runs by reason*). Compare with *Listing duration p95* (slow storage) and *Files transferred* (large volume).",
+      "type": "timeseries",
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 63,
+        "w": 12,
+        "h": 8
+      },
+      "interval": "1h",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "quantile_over_time(0.5, ${selector} |= \"event=sync_end\" | logfmt | event=\"sync_end\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" | unwrap duration_ms | __error__=\"\" [$__interval]) by (sclone_job)",
+          "legendFormat": "p50 {{sclone_job}}",
+          "queryType": "range"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "quantile_over_time(0.95, ${selector} |= \"event=sync_end\" | logfmt | event=\"sync_end\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" | unwrap duration_ms | __error__=\"\" [$__interval]) by (sclone_job)",
+          "legendFormat": "p95 {{sclone_job}}",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "auto",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 120000
+              },
+              {
+                "color": "red",
+                "value": 180000
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 22,
+      "title": "Listing duration p95",
+      "description": "**What it measures**: the 95th percentile listing time per hour, by job, side and bucket (`listing_done`, field `duration_ms`).\n\n**Normal value**: proportional to the number of objects. Indicative thresholds (orange 30 s, red 60 s): **adjust them** to your bucket sizes.\n\n**When to worry / what to do**: a rise without more objects (*Objects per bucket*): slow storage, see also the `listing_retry` in *Connection and listing failures*.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 63,
+        "w": 12,
+        "h": 8
+      },
+      "interval": "1h",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "quantile_over_time(0.95, ${selector} |= \"event=listing_done\" | logfmt | event=\"listing_done\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" | unwrap duration_ms | __error__=\"\" [$__interval]) by (sclone_job, side, bucket)",
+          "legendFormat": "{{sclone_job}} {{side}} {{bucket}}",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "auto",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 30000
+              },
+              {
+                "color": "red",
+                "value": 60000
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 23,
+      "title": "Upload throughput",
+      "description": "**What it measures**: the bytes uploaded per second, averaged over each 15 min slot (`sync_end`, field `uploaded_bytes`). Not the instant speed during a run.\n\n**Normal value**: depends on the activity: peaks when many files are added, close to 0 otherwise.\n\n**When to worry / what to do**: no throughput while files should be copied: see *Failed files* and *Runs*.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 71,
+        "w": 8,
+        "h": 8
+      },
+      "interval": "15m",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "sum by (sclone_job) (rate(${selector} |= \"event=sync_end\" | logfmt | event=\"sync_end\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" | unwrap uploaded_bytes | __error__=\"\" [$__interval]))",
+          "legendFormat": "{{sclone_job}}",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "auto",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 24,
+      "title": "Uploaded volume",
+      "description": "**What it measures**: the bytes uploaded per 15 min slot (sum of the `uploaded_bytes` field of `sync_end`).\n\n**Normal value**: depends on the activity.\n\n**When to worry / what to do**: an unusual volume (peak or none): compare with *Files transferred* and *Bytes per bucket*.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 71,
+        "w": 8,
+        "h": 8
+      },
+      "interval": "15m",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "sum by (sclone_job) (sum_over_time(${selector} |= \"event=sync_end\" | logfmt | event=\"sync_end\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" | unwrap uploaded_bytes | __error__=\"\" [$__interval]))",
+          "legendFormat": "{{sclone_job}}",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "off"
+            },
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 25,
+      "title": "Files transferred",
+      "description": "**What it measures**: the files uploaded (`uploaded`), deleted (`deleted`) and failed (`failed`) per 15 min slot (fields of `sync_end`).\n\n**Normal value**: uploads and deletions following the activity; no red bar.\n\n**When to worry / what to do**: failures (red): see *Failures by HTTP status*. Unexpected mass deletions: check the source and `maxDeletion`.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 71,
+        "w": 8,
+        "h": 8
+      },
+      "interval": "15m",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "sum by (sclone_job) (sum_over_time(${selector} |= \"event=sync_end\" | logfmt | event=\"sync_end\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" | unwrap uploaded | __error__=\"\" [$__interval]))",
+          "legendFormat": "Uploaded {{sclone_job}}",
+          "queryType": "range"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "sum by (sclone_job) (sum_over_time(${selector} |= \"event=sync_end\" | logfmt | event=\"sync_end\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" | unwrap deleted | __error__=\"\" [$__interval]))",
+          "legendFormat": "Deleted {{sclone_job}}",
+          "queryType": "range"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "sum by (sclone_job) (sum_over_time(${selector} |= \"event=sync_end\" | logfmt | event=\"sync_end\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" | unwrap failed | __error__=\"\" [$__interval]))",
+          "legendFormat": "Failed {{sclone_job}}",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "off"
+            },
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/^Uploaded/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/^Deleted/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/^Failed/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 103,
+      "type": "row",
+      "title": "🪣 Buckets",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 79,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 26,
+      "title": "Objects per bucket",
+      "description": "**What it measures**: the number of listed objects by job, side (`source`, `target`) and bucket (`listing_done`, field `objects`).\n\n**Normal value**: in unidirectional mode the target follows the source; the curves move slowly.\n\n**When to worry / what to do**: a lasting gap between source and target: see *Failed files* and *Refused deletions*. A sudden drop on one side: check the bucket before the next run (`maxDeletion` protects the target).",
+      "type": "timeseries",
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 80,
+        "w": 12,
+        "h": 8
+      },
+      "interval": "15m",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "max by (sclone_job, side, bucket) (max_over_time(${selector} |= \"event=listing_done\" | logfmt | event=\"listing_done\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" | unwrap objects | __error__=\"\" [$__interval]))",
+          "legendFormat": "{{sclone_job}} {{side}} {{bucket}}",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "auto",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 27,
+      "title": "Bytes per bucket",
+      "description": "**What it measures**: the sum of the listed object sizes by job, side and bucket (`listing_done`, field `bytes`).\n\n**Normal value**: the target follows the source; steady growth.\n\n**When to worry / what to do**: a lasting gap between source and target: see *Failed files* and *Files too large*.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 80,
+        "w": 12,
+        "h": 8
+      },
+      "interval": "15m",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "expr": "max by (sclone_job, side, bucket) (max_over_time(${selector} |= \"event=listing_done\" | logfmt | event=\"listing_done\" | label_format sclone_job=\"{{ or .job_extracted .job }}\" | sclone_job=~\"${job}\" | unwrap bytes | __error__=\"\" [$__interval]))",
+          "legendFormat": "{{sclone_job}} {{side}} {{bucket}}",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "auto",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    }
+  ]
+}

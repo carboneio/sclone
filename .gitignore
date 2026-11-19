@@ -195,3 +195,12 @@ targetDataset
 *-linux
 *-macos
 *-win.exe
+# sclone lock and temporary cache files
+*.cache.json.lock
+*.cache.json.*.tmp
+
+# local environment files (credentials)
+.env.*
+
+# local French copy of the Grafana dashboard (not published)
+docs/grafana-dashboard.fr.json

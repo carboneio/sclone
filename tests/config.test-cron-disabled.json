@@ -1,9 +1,10 @@
 
 {
     "test": true,
+    "retryDelay": 0,
     "mode": "unidirectional",
     "delete": false,
-    "cacheFilename": "listFiles.cache.json",
+    "cacheFilename": "tests/test-uni.cache.json",
     "integrityCheck": false,
     "listRetryDelay": 1,
     "listRetry": 1,
