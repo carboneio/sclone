@@ -39,9 +39,20 @@ function isSameContent(fileA, fileB) {
 }
 
 /**
+ * Unidirectional mode with `compareEtag: false`: the etags are not compared, the target is considered a copy
+ * of the source if it has the same size and is not older than the source. A source modified after the
+ * copy is newer than it, so it is synchronised again.
+ */
+function isSameCopy(source, target) {
+  return typeof source.bytes === 'number'
+    && source.bytes === target.bytes
+    && source.lastmodified <= target.lastmodified;
+}
+
+/**
  * @param {*} callback
  */
-function computeSync(files, mode, deletion, logSync) {
+function computeSync(files, mode, deletion, logSync, compareEtag) {
 
   if (!mode) {
     throw new Error("Function computeSync: missing argument `mode`, options: " + helper.SUPPORTED_MODES.join(', '));
@@ -49,6 +60,10 @@ function computeSync(files, mode, deletion, logSync) {
 
   deletion = deletion ?? false;
   logSync = logSync ?? false;
+  compareEtag = compareEtag ?? true;
+  if (compareEtag === false && mode !== helper.MODES.UNI) {
+    throw new Error(`Function computeSync: "compareEtag: false" is only supported in "${helper.MODES.UNI}" mode`);
+  }
 
   const objectsToUploadSource = [];
   const objectsToDeleteSource = [];
@@ -126,7 +141,8 @@ function computeSync(files, mode, deletion, logSync) {
      * ">=" and not ">": when the timestamps are identical, the source version wins the conflict
      * (the target loop above uses a strict ">", so only this direction fires on a tie) */
     if ((mode === helper.MODES.BI && _objectTarget !== undefined && isSameContent(_objectTarget, value) === false && value.lastmodified >= _objectTarget.lastmodified) ||
-        (mode === helper.MODES.UNI && _objectTarget !== undefined && isSameContent(_objectTarget, value) === false)) {
+        (mode === helper.MODES.UNI && _objectTarget !== undefined && isSameContent(_objectTarget, value) === false
+          && (compareEtag === true || isSameCopy(value, _objectTarget) === false))) {
       files.target.set(key, value);
       files.cache.set(key, value);
       value.updated = true;
@@ -193,6 +209,7 @@ function syncLogClean(interval) {
 module.exports = {
   computeSync,
   isSameContent,
+  isSameCopy,
   isMultipartEtag,
   syncLogClean,
   syncLogGenerate

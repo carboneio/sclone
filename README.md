@@ -88,6 +88,7 @@ At the root of the project, copy the `config.default.json` and name it `config.j
 | **cron** |  | Define the period of the program execution, and must follow the CRON syntax, for instance every minute: `"*/1 * * * *"`. A new process is not started until the current synchronisation is finished. If the option is not defined, the synchronisation is executed immediately, one time. |
 | **delete** | `false` | If `true`, files are deleted according to the synchronization mode logic. |
 | **integrityCheck** | `false` | If `true`, MD5 hashes are checked for file integrity. |
+| **compareEtag** | `true` | `unidirectional` mode only. If `false`, the etags (md5) of a file present on both storages are not compared: the target is considered up to date if it has the same size and is not older than the source. For storages listing etags that are not the MD5 of the content, see [Etags that are not an MD5](#etags-that-are-not-an-md5). |
 | **logSync** | `false` | If `true`, at the end of each synchronisation, a JSON file is created including all file operations. |
 | **cacheFilename** | `"listFiles.cache.json"` | File name of the cache, it is keeping the list of files synchronised during `bidirectional` mode only. The JSON file is created automatically in the current working directory (the directory the program is started from). An absolute path can also be provided. |
 | **transfers** | `15` | Number of file operations to run in parallel: upload/deletion. If a storage responds with many errors (status 500, socket or authentication error), consider reducing the number of transfers. |
@@ -190,6 +191,17 @@ When only one of the two versions has a multipart etag, both modes consider the 
 - When both etags are multipart but different, the content cannot be compared: the file is synchronised.
 
 With `integrityCheck`, the downloaded content of a multipart file cannot be checked against its etag: the check is skipped for these files. The upload is still verified by the storage with the `Content-MD5` header (S3) or the `ETag` header (SWIFT).
+
+### Etags that are not an MD5
+
+Some storages list an etag that is not the MD5 of the content. OVH Object Storage (November 2026) lists a 64 hexadecimal characters etag for a file rewritten by a server-side copy (`x-amz-copy-source`, used to update the metadata), while a `HEAD` of the same file returns the real MD5. The copy made by sclone gets the real MD5: the two etags never match, and the file is uploaded again on every run. On a versioned bucket, every run also creates a new version of each of these files.
+
+In `unidirectional` mode, `"compareEtag": false` stops comparing the etags: the target is considered up to date if it has the same size and is not older than the source (the copy is always created after the original). Consequences:
+- A source file modified after the copy is synchronised, even with the same size: it is newer than the copy. A metadata update on the source is synchronised the same way.
+- A content change that keeps the exact same size is missed in one case only: the source file is modified while sclone is copying it (between the download and the end of the upload), the copy of the previous version is then newer than the source. It is safe for storages where the content of a key never changes (for example keys holding a hash of the content).
+- New files and deleted files are synchronised as usual.
+
+`compareEtag: false` is refused in `bidirectional` mode: the copy cannot be told from the original. Set it back to `true` once the storage lists the real MD5 again.
 
 ## Development
 
