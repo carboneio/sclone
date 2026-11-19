@@ -26,6 +26,13 @@ function sclone (config, next) {
         if (!config?.delete) {
             config.delete = false;
         }
+        if (config?.compareEtag !== undefined && typeof config.compareEtag !== 'boolean') {
+            return helper.stop(new Error('config "compareEtag" must be a boolean'));
+        }
+        config.compareEtag = config?.compareEtag ?? true;
+        if (config.compareEtag === false && config.mode !== helper.MODES.UNI) {
+            return helper.stop(new Error(`config "compareEtag: false" is only supported in "${helper.MODES.UNI}" mode: in "${helper.MODES.BI}" mode, the copy cannot be told from the original`));
+        }
         if (!config?.cacheFilename) {
             config.cacheFilename = 'listFiles.cache.json';
         }
@@ -43,6 +50,9 @@ function sclone (config, next) {
     
         console.log(`🟢 Synchronisation: ${config.mode} ( Source:${config.source.name} ${config.mode === helper.MODES.BI ? "<=>" : "=>"} Destination:${config.target.name} )`);
         console.log(config.delete === true ? "🟢 Deletion: Enabled 🚧 Danger" : "⚪️ Deletion: Disabled");
+        if (config.compareEtag === false) {
+            console.log("🟠 ETag comparison: Disabled, a target file with the same size and not older than the source is considered identical");
+        }
         if (process?.env?.SCLONE_CRON) {
             config.cron = process?.env?.SCLONE_CRON;
         }
@@ -117,7 +127,7 @@ function startSync(config, callback) {
       }
       /** Compute the logic of synchronisation */
 
-      const { objectsToDeleteTarget, objectsToUploadTarget, objectsToUploadSource, objectsToDeleteSource } = logic.computeSync(files, config.mode, config?.delete, config?.logSync || config?.dryRun);
+      const { objectsToDeleteTarget, objectsToUploadTarget, objectsToUploadSource, objectsToDeleteSource } = logic.computeSync(files, config.mode, config?.delete, config?.logSync || config?.dryRun, config?.compareEtag);
 
       if (config.dryRun === true) {
         console.log("🟢 Dry run done: JSON file created in the \"logs\" folder that details all file operations");

@@ -682,6 +682,95 @@ describe("logic", function() {
     });
   });
 
+  /**
+   * OVH lists an etag of 64 hexadecimal characters for a file rewritten by a server-side copy (metadata update),
+   * while a HEAD returns the real MD5: the copy made by sclone never matches.
+   */
+  describe("compareEtag option", function() {
+    const OVH_COPY_ETAG = "e02978f8c4d00dbe4faf90e94c6beff3aa020ae28157ba0b1879135a855f3f2f";
+    const MD5 = "98771c31e3d9efad72814907d5834dbd";
+    const SOURCE_DATE = 1763083375000;
+    const COPY_DATE = 1763306443000;
+
+    it('should upload on every run a file whose source etag is not its MD5 when the etags are compared (default)', function() {
+      files.source.set('file1', { md5: OVH_COPY_ETAG, key: "file1", lastmodified: SOURCE_DATE, bytes: 21096 } );
+      files.target.set('file1', { md5: MD5, key: "file1", lastmodified: COPY_DATE, bytes: 21096 } );
+
+      const { objectsToUploadTarget } = logic.computeSync(files, helper.MODES.UNI, true);
+
+      assert.strictEqual(objectsToUploadTarget.length, 1);
+    });
+
+    it('should not upload a target file with the same size and newer than the source', function() {
+      files.source.set('file1', { md5: OVH_COPY_ETAG, key: "file1", lastmodified: SOURCE_DATE, bytes: 21096 } );
+      files.target.set('file1', { md5: MD5, key: "file1", lastmodified: COPY_DATE, bytes: 21096 } );
+
+      const { objectsToUploadTarget, objectsToDeleteTarget } = logic.computeSync(files, helper.MODES.UNI, true, false, false);
+
+      assert.strictEqual(objectsToUploadTarget.length, 0);
+      assert.strictEqual(objectsToDeleteTarget.length, 0);
+    });
+
+    it('should not upload a target file with the same size and the same date as the source', function() {
+      files.source.set('file1', { md5: OVH_COPY_ETAG, key: "file1", lastmodified: SOURCE_DATE, bytes: 21096 } );
+      files.target.set('file1', { md5: MD5, key: "file1", lastmodified: SOURCE_DATE, bytes: 21096 } );
+
+      const { objectsToUploadTarget } = logic.computeSync(files, helper.MODES.UNI, true, false, false);
+
+      assert.strictEqual(objectsToUploadTarget.length, 0);
+    });
+
+    it('should upload a source file modified after the copy, even with the same size', function() {
+      files.source.set('file1', { md5: OVH_COPY_ETAG, key: "file1", lastmodified: COPY_DATE + 1000, bytes: 21096 } );
+      files.target.set('file1', { md5: MD5, key: "file1", lastmodified: COPY_DATE, bytes: 21096 } );
+
+      const { objectsToUploadTarget } = logic.computeSync(files, helper.MODES.UNI, true, false, false);
+
+      assert.strictEqual(objectsToUploadTarget.length, 1);
+      assert.strictEqual(objectsToUploadTarget[0].updated, true);
+    });
+
+    it('should upload a source file with a different size, even if the target is newer', function() {
+      files.source.set('file1', { md5: OVH_COPY_ETAG, key: "file1", lastmodified: SOURCE_DATE, bytes: 21096 } );
+      files.target.set('file1', { md5: MD5, key: "file1", lastmodified: COPY_DATE, bytes: 21097 } );
+
+      const { objectsToUploadTarget } = logic.computeSync(files, helper.MODES.UNI, true, false, false);
+
+      assert.strictEqual(objectsToUploadTarget.length, 1);
+    });
+
+    it('should upload a source file if the size is unknown', function() {
+      files.source.set('file1', { md5: OVH_COPY_ETAG, key: "file1", lastmodified: SOURCE_DATE } );
+      files.target.set('file1', { md5: MD5, key: "file1", lastmodified: COPY_DATE } );
+
+      const { objectsToUploadTarget } = logic.computeSync(files, helper.MODES.UNI, true, false, false);
+
+      assert.strictEqual(objectsToUploadTarget.length, 1);
+    });
+
+    it('should still upload new files and delete removed files', function() {
+      files.source.set('new', { md5: MD5, key: "new", lastmodified: SOURCE_DATE, bytes: 21096 } );
+      files.target.set('removed', { md5: MD5, key: "removed", lastmodified: COPY_DATE, bytes: 21096 } );
+
+      const { objectsToUploadTarget, objectsToDeleteTarget } = logic.computeSync(files, helper.MODES.UNI, true, false, false);
+
+      assert.deepStrictEqual(objectsToUploadTarget.map((file) => file.key), ['new']);
+      assert.deepStrictEqual(objectsToDeleteTarget.map((file) => file.key), ['removed']);
+    });
+
+    it('should refuse "compareEtag: false" in bidirectional mode: the copy cannot be told from the original', function() {
+      assert.throws(() => logic.computeSync(files, helper.MODES.BI, false, false, false), /only supported in "unidirectional" mode/);
+    });
+
+    it('should tell a copy from its source by the size and the date', function() {
+      assert.strictEqual(logic.isSameCopy({ bytes: 10, lastmodified: 1 }, { bytes: 10, lastmodified: 2 }), true);
+      assert.strictEqual(logic.isSameCopy({ bytes: 10, lastmodified: 2 }, { bytes: 10, lastmodified: 2 }), true);
+      assert.strictEqual(logic.isSameCopy({ bytes: 10, lastmodified: 3 }, { bytes: 10, lastmodified: 2 }), false);
+      assert.strictEqual(logic.isSameCopy({ bytes: 10, lastmodified: 1 }, { bytes: 11, lastmodified: 2 }), false);
+      assert.strictEqual(logic.isSameCopy({ lastmodified: 1 }, { lastmodified: 2 }), false);
+    });
+  });
+
 });
 
 beforeEach(function(done) {

@@ -2,6 +2,9 @@
 
 All notable changes to this project will be documented in this file. This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.4.0
+- Added the `compareEtag` option (`unidirectional` mode only, default `true`). With `false`, the etags of a file present on both storages are not compared: the target is considered up to date if it has the same size and is not older than the source. OVH Object Storage lists a 64 hexadecimal characters etag, which is not the MD5 of the content, for a file rewritten by a server-side copy (metadata update): the copy made by sclone never matched, and ~8000 files were uploaded again on every run, creating a new version of each of them on versioned buckets. See "Etags that are not an MD5" in the README. The option is refused in `bidirectional` mode, and must be a boolean.
+
 ## 1.3.0
 - Released the 2026/11/06
 - Fixed lost error files and wrong exit code on failure: the process was killed with `process.exit()` before cqueue finished writing the error file of the last retry into `logs`, and it exited with code `0`. It now exits with code `1` once all files are written.

@@ -362,6 +362,76 @@ describe("Sclone", function () {
         });
     });
 
+    describe("compareEtag option", function () {
+        const _bucketsXml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><ListAllMyBucketsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Owner><ID>89123456:user-feiowjfOEIJW</ID><DisplayName>12345678:user-feiowjfOEIJW</DisplayName></Owner><Buckets><Bucket><Name>invoices</Name><CreationDate>2023-02-27T11:46:24.000Z</CreationDate></Bucket></Buckets></ListAllMyBucketsResult>";
+        const _listXml = (etag, lastModified) => `<?xml version="1.0" encoding="UTF-8"?><ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Name>invoices</Name><Prefix></Prefix><KeyCount>1</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated><Contents><Key>3066-template.ods</Key><LastModified>${lastModified}</LastModified><ETag>&quot;${etag}&quot;</ETag><Size>21096</Size><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>`;
+        const _configPath = path.join(__dirname, 'config.test-compare-etag-invalid.json');
+
+        afterEach(function () {
+            fs.rmSync(_configPath, { force: true });
+            process.exitCode = 0;
+        });
+
+        it('should not upload a target file with the same size and newer than the source when "compareEtag" is false, even if the etags differ', function (done) {
+            process.env.SCLONE_CONFIG = 'tests/config.test-compare-etag.json';
+            delete process.env.SCLONE_CRON;
+
+            nock(urlS3GRA).defaultReplyHeaders({ 'content-type': 'application/xml' }).get('/').reply(200, _bucketsXml);
+            nock(urlS3SBG).defaultReplyHeaders({ 'content-type': 'application/xml' }).get('/').reply(200, _bucketsXml);
+            /** OVH listing of a source file rewritten by a server-side copy: the etag is not the MD5 of the content */
+            const nockListSource = nock(urlS3GRA)
+                .defaultReplyHeaders({ 'content-type': 'application/xml' })
+                .get('/invoices')
+                .query({ 'list-type' : '2' })
+                .reply(200, _listXml('e02978f8c4d00dbe4faf90e94c6beff3aa020ae28157ba0b1879135a855f3f2f', '2026-11-14T01:22:55.000Z'));
+            /** The copy made by sclone: the real MD5, created after the source */
+            const nockListTarget = nock(urlS3SBG)
+                .defaultReplyHeaders({ 'content-type': 'application/xml' })
+                .get('/invoices')
+                .query({ 'list-type' : '2' })
+                .reply(200, _listXml('98771c31e3d9efad72814907d5834dbd', '2026-11-16T15:20:43.000Z'));
+
+            sclone((err) => {
+                assert.strictEqual(err, undefined);
+                assert.strictEqual(nockListSource.pendingMocks().length, 0);
+                assert.strictEqual(nockListTarget.pendingMocks().length, 0);
+                const _output = console.log.getCalls().map(el => el.args[0]);
+                assert.strictEqual(getOccurrence(_output, 'ETag comparison: Disabled'), 1);
+                assert.strictEqual(getOccurrence(_output, 'Summary Target | Uploads: 0 (Updates 0) / Deletions: 0'), 1);
+                assert.strictEqual(getOccurrence(_output, 'Process done'), 1);
+                done();
+            });
+        });
+
+        it('should refuse "compareEtag: false" in bidirectional mode', function () {
+            const _config = JSON.parse(fs.readFileSync(path.join(__dirname, 'config.test-compare-etag.json')));
+            fs.writeFileSync(_configPath, JSON.stringify({ ..._config, mode: 'bidirectional' }));
+            process.env.SCLONE_CONFIG = _configPath;
+            delete process.env.SCLONE_CRON;
+
+            sclone(() => {
+                assert.fail('the synchronisation must not start');
+            });
+            const _output = console.log.getCalls().map(el => el.args[0]);
+            assert.strictEqual(getOccurrence(_output, 'config "compareEtag: false" is only supported in "unidirectional" mode'), 1);
+            assert.strictEqual(process.exitCode, 1);
+        });
+
+        it('should refuse a "compareEtag" value which is not a boolean', function () {
+            const _config = JSON.parse(fs.readFileSync(path.join(__dirname, 'config.test-compare-etag.json')));
+            fs.writeFileSync(_configPath, JSON.stringify({ ..._config, compareEtag: 'false' }));
+            process.env.SCLONE_CONFIG = _configPath;
+            delete process.env.SCLONE_CRON;
+
+            sclone(() => {
+                assert.fail('the synchronisation must not start');
+            });
+            const _output = console.log.getCalls().map(el => el.args[0]);
+            assert.strictEqual(getOccurrence(_output, 'config "compareEtag" must be a boolean'), 1);
+            assert.strictEqual(process.exitCode, 1);
+        });
+    });
+
     describe("Bidirectional sync end-to-end", function () {
         const _cachePath = path.join(__dirname, 'test-bi.cache.json');
 
