@@ -591,15 +591,13 @@ describe("Sclone", function () {
                   return fs.readFileSync(path.join(__dirname, "assets", "listFiles.s3.empty.xml"));
                 });
 
-            /** The transfer fails: download returns 404, a permanent error not retried */
+            /** Deleted after the listing: the download returns 404, the file is skipped (not a failure, not retried) */
             const nockDownloadS3GRA = nock(urlS3GRA)
                 .get('/invoices/invoice-2024-01.pdf')
                 .reply(404);
 
             sclone((err) => {
-                assert.strictEqual(err instanceof Error, true);
-                assert.strictEqual(err.toString().includes('Synchronisation errors'), true);
-                assert.strictEqual(err.toString().includes('upload-from-source-to-target'), true);
+                assert.strictEqual(err, undefined);
                 assert.strictEqual(nockAuthS3GRA.pendingMocks().length, 0);
                 assert.strictEqual(nockAuthS3SBG.pendingMocks().length, 0);
                 assert.strictEqual(nockListFilesS3GRA.pendingMocks().length, 0);
@@ -607,23 +605,23 @@ describe("Sclone", function () {
                 assert.strictEqual(nockDownloadS3GRA.pendingMocks().length, 0);
                 /** The cache is saved, without entry for the file never transferred */
                 assert.deepStrictEqual(readCache(_cachePath).files, {});
+                assert.deepStrictEqual(logs.filter('transfer_failed'), []);
                 /** One line, with the structured cause */
-                const _failures = logs.filter('transfer_failed');
-                assert.strictEqual(_failures.length, 1);
-                _failures.forEach((line, i) => {
-                    assert.strictEqual(line.level, 'warn');
-                    assert.strictEqual(line.op, 'upload');
-                    assert.strictEqual(line.direction, 'source_to_target');
-                    assert.strictEqual(line.phase, 'download');
-                    assert.strictEqual(line.key, 'invoice-2024-01.pdf');
-                    assert.strictEqual(line.status, 404);
-                    assert.strictEqual(line.error, 'S3 downloadFile Error 404 | file not found');
-                    assert.strictEqual(line.reason, 'permanent');
-                    assert.strictEqual(line.try, i);
-                });
+                const _skipped = logs.filter('transfer_skipped');
+                assert.strictEqual(_skipped.length, 1);
+                assert.strictEqual(_skipped[0].level, 'warn');
+                assert.strictEqual(_skipped[0].op, 'upload');
+                assert.strictEqual(_skipped[0].direction, 'source_to_target');
+                assert.strictEqual(_skipped[0].phase, 'download');
+                assert.strictEqual(_skipped[0].key, 'invoice-2024-01.pdf');
+                assert.strictEqual(_skipped[0].status, 404);
+                assert.strictEqual(_skipped[0].error, 'S3 downloadFile Error 404 | file not found');
+                assert.strictEqual(_skipped[0].reason, 'source_gone');
+                assert.strictEqual(_skipped[0].try, undefined);
                 const _end = logs.filter('sync_end')[0];
-                assert.strictEqual(_end.status, 'failed');
-                assert.strictEqual(_end.failed, 1);
+                assert.strictEqual(_end.status, 'success');
+                assert.strictEqual(_end.failed, 0);
+                assert.strictEqual(_end.skipped, 1);
                 assert.strictEqual(_end.uploaded, 0);
                 done();
             });

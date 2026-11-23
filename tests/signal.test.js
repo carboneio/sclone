@@ -14,6 +14,10 @@ const INDEX = path.join(__dirname, '..', 'index.js');
  */
 describe('stop signals (SIGTERM, SIGINT)', function () {
   this.timeout(10000);
+  /** Windows has no POSIX signals: `child.kill(signal)` terminates the process at once, its handlers never run */
+  if (process.platform === 'win32') {
+    return it.skip('POSIX stop signals: not available on Windows');
+  }
   let _server = null;
   let _url = '';
   let _dir = '';

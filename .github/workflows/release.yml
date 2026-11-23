@@ -50,6 +50,7 @@ jobs:
           path: |
             sclone-*-linux
             sclone-*-macos
+            sclone-*-win.exe
 
       - name: Create GitHub release
         env:
@@ -57,9 +58,9 @@ jobs:
         run: |
           # Idempotent: a re-run (or a re-pushed tag) uploads the binaries to the existing release
           if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" sclone-*-linux sclone-*-macos --clobber
+            gh release upload "$GITHUB_REF_NAME" sclone-*-linux sclone-*-macos sclone-*-win.exe --clobber
           else
-            gh release create "$GITHUB_REF_NAME" sclone-*-linux sclone-*-macos \
+            gh release create "$GITHUB_REF_NAME" sclone-*-linux sclone-*-macos sclone-*-win.exe \
               --title "$GITHUB_REF_NAME" \
               --generate-notes
           fi

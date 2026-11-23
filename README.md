@@ -27,32 +27,42 @@ If you would like to know more about performance, refer to the [benchmarks](#ben
 
 ## Benchmarks
 
-The transfer benchmarks below were measured with sclone 1.0.0 and have not been run again with 2.0. With 2.0, a synchronisation without any change of 100 000 files takes about 3.9 s on a local MinIO, and the plan of 350 000 files is computed in about 50 ms.
+Time of a run in seconds (median of 3, lower is better), 20 000 files of 1 KB, 16 parallel transfers for every tool, measured from a laptop. Every run is checked: same files, sizes and contents on both sides.
 
-> * Environment: VPS OVH - 2 vCores - 4GB Ram - Bandwidth 500Mbit/s - Debian 12 - Node 20.5.1 - Strasbourg (France)
-> * Default options were used for sclone (1.0.0) / rclone (v1.63.1) / s3sync (2.61)
-> * OVH S3 bucket type: normal (and not performance)
+**Run without change** (the usual case of a scheduled sync)
 
-Unidirectional sync from a source storage to a target storage located in different regions. Every synchronization used the same 10 GB dataset of 1624 files.
+| Tool | OVH S3 → Scaleway | Scaleway → OVH S3 | OVH S3 → OVH Swift |
+|---|---|---|---|
+| **sclone 2.1** (`listingConcurrency: 8`) | **4.7** | **5.2** | **6.5** |
+| rclone `--fast-list --update --use-server-modtime` | 13.8 | 14.3 | 14.8 |
+| mc `mirror` | 15.6 | 16.7 | – |
+| rclone (default options) | 510 | 527 | 531 |
+| s3sync ¹ | 277 | 317 | – |
 
-| | **10GB** from S3 OVH Gra to S3 OVH Sbg | **10GB** from S3 OVH Gra to S3 Scaleway Paris | **10GB** from S3 OVH Gra to SWIFT OVH Gra |
-|-----------------------------|-------------------------------|-------------------------------|--------------------------------|
-| **sclone**  | 3.30 Min  |  4.10 Min   | 3.27 Min  |
-| **rclone**  | 5.45 Min |  10.51 Min  | 6.32 Min |
-| **s3sync**  | 3.10 Min |   4.09 Min   | ❌ |
+**First sync** (empty target, OVH S3 → Scaleway)
 
-Bidirectional sync between two storages located in different regions. Every synchronization used the same two 8 GB datasets (1354 files) with 1/3 common files, 1/3 new files and 1/3 edited files.
+| Tool | Time |
+|---|---|
+| **sclone** `transfers: 64` | **217** |
+| sclone `transfers: 32` | 406 |
+| s3sync `-w 16` | 402 |
+| sclone `transfers: 15` (default) | 827 |
+| rclone | 1 256 |
 
-| | **8GB** S3 OVH Gra <> **8GB** S3 OVH Sbg | **8GB** S3 OVH Gra <> **8GB** S3 Scaleway Paris | **8GB** from S3 OVH Gra <> **8GB** SWIFT OVH Gra |
-|-----------------------------|-------------------------------|-------------------------------|--------------------------------|
-| **sclone**  | 3.59 Min | 4.11 Min | 3.42 Min |
-| **rclone**  | 8.4 Min | 13.57 Min | 10.40 Min |
+- A first sync is limited by the latency of each copy: raise `transfers` for it. It changes nothing for the runs without change, which copy nothing.
+- On a local MinIO, sclone and a tuned rclone are equally fast (about 0.4 s for 10 000 files).
+- sclone uses more memory (150 to 290 MB) than mc or s3sync (about 60 MB): it keeps both listings and its cache in memory.
+- When both buckets use the same provider and account, s5cmd and the AWS CLI copy server-side, which sclone does not.
+
+¹ s3sync copies every file again on each run and never deletes. `rclone --size-only` (not shown) misses files modified with the same size. Neither keeps the target identical to the source.
+
+Versions: sclone 2.1.0, rclone 1.75.2, s3sync 2.62, mc RELEASE.2025-08-13, s5cmd 2.3.0, AWS CLI 2.39.0, macOS (Apple M2 Max), Node 26.
 
 ## Quickstart
 
 ### Option 1: Standalone binary
 
-1. Download the latest binary for Linux (`sclone-<version>-linux`) or macOS (`sclone-<version>-macos`) from the [Release page](https://github.com/carboneio/sclone/releases) and make it executable:
+1. Download the latest binary for Linux (`sclone-<version>-linux`), macOS (`sclone-<version>-macos`) or Windows (`sclone-<version>-win.exe`) from the [Release page](https://github.com/carboneio/sclone/releases) and make it executable (Linux and macOS):
 ```sh
 chmod +x ./sclone-2.0.0-linux
 ```
@@ -61,6 +71,7 @@ chmod +x ./sclone-2.0.0-linux
 ```sh
 ./sclone-2.0.0-linux
 ```
+On Windows, run `sclone-2.0.0-win.exe` from a terminal (PowerShell or cmd). Windows has no `SIGTERM`: stop a run with Ctrl+C (`sync_end status=interrupted`, exit code 130).
 
 ### Option 2: npm (requires Node.js 26 or higher)
 
@@ -94,7 +105,8 @@ Copy the `config.default.json` (from the repository or the npm package) to a `co
 | **cacheFilename** | `"sclone-<mode>-<hash>.cache.json"` | File name of the cache: the state of each file after the last synchronisation, written in both modes, unidirectional included (see [Cache](#cache)). By default the name is derived from the mode and the two storages (and their accounts), so several instances can share a working directory. The file is created in the current working directory (the directory the program is started from). An absolute path can also be provided. The lock file is created in the same directory: when the same pair of storages may run from several working directories, use an absolute path, otherwise each directory has its own cache and lock and the runs are not excluded. |
 | **transfers** | `15` | Number of file operations to run in parallel: upload/deletion. If a storage responds with many errors (status 500, socket or authentication error), consider reducing the number of transfers. |
 | **retry** | `1` | Max number of retries to sync a file. `0` is read as `1`. |
-| **listRetry** | `5` | Max number of retries of a listing page on a temporary error (network, status 5xx, 408, 429, page cut or invalid). Only the failed page is requested again, not the whole listing. A permanent error (access denied, bucket not found) is not retried. If a page still fails, the synchronisation is stopped before any operation. |
+| **listRetry** | `5` | Max number of retries of a listing page on a temporary error (network, status 5xx, 408, 429, page cut or invalid). Only the failed page is requested again, not the whole listing. A permanent error (access denied, bucket not found) is not retried. If a page still fails, the synchronisation is stopped before any operation. The S3 connection check (one key of the bucket) is retried the same way. |
+| **listingConcurrency** | `4` | Number of key ranges listed in parallel on each side, from the second run (see [Listing](#listing)). `1`: one sequential listing, as in 2.0. Up to `64`. |
 | **listRetryDelay** | `1000` | Delay in milliseconds before the first retry of a listing page, doubled on each retry: 1s, 2s, 4s, 8s, 16s by default. |
 | **dryRun** | `false` | Do a trial run with no permanent changes: a JSON file including all file operations is created, as with `logSync`. The cache is not saved. |
 | **maxDeletion** |  | Max number of deletions allowed on each storage during a synchronisation: up to `maxDeletion` files are deleted. Above it, no file is deleted on either storage, the uploads still run, and the synchronisation ends as failed (`deletion_refused reason=max_deletion`). It is a security measure to avoid propagation of unexpected bulk deletions. Not set or `0`: no limit. |
@@ -179,9 +191,9 @@ Sclone writes one line per event on the standard output, in the [logfmt](https:/
 
 ```
 ts=2026-11-19T09:57:25.071Z level=info job=backup-invoices run=089a9f5b event=sync_start msg="Synchronisation started" mode=unidirectional source=s3:invoices target=s3:invoices-copy delete=true dry_run=false cron=true
-ts=2026-11-19T09:57:25.087Z level=info job=backup-invoices run=089a9f5b event=listing_done msg="target listed" side=target storage=s3 bucket=invoices-copy objects=5 bytes=15000 duration_ms=4
-ts=2026-11-19T09:57:25.088Z level=info job=backup-invoices run=089a9f5b event=listing_done msg="source listed" side=source storage=s3 bucket=invoices objects=5 bytes=15000 duration_ms=4
-ts=2026-11-19T09:57:25.089Z level=info job=backup-invoices run=089a9f5b event=sync_end msg="Synchronisation success" status=success duration_ms=16 uploaded=0 uploaded_bytes=0 deleted=0 failed=0 source_objects=5 target_objects=5 source_bytes=15000 target_bytes=15000
+ts=2026-11-19T09:57:25.087Z level=info job=backup-invoices run=089a9f5b event=listing_done msg="target listed" side=target storage=s3 bucket=invoices-copy objects=5 bytes=15000 duration_ms=4 ranges=1
+ts=2026-11-19T09:57:25.088Z level=info job=backup-invoices run=089a9f5b event=listing_done msg="source listed" side=source storage=s3 bucket=invoices objects=5 bytes=15000 duration_ms=4 ranges=1
+ts=2026-11-19T09:57:25.089Z level=info job=backup-invoices run=089a9f5b event=sync_end msg="Synchronisation success" status=success duration_ms=16 uploaded=0 uploaded_bytes=0 deleted=0 skipped=0 failed=0 source_objects=5 target_objects=5 source_bytes=15000 target_bytes=15000
 ```
 
 - Each line starts with `ts` (UTC), `level`, `job` (the `name` option), `run` (a random id shared by all the lines of one synchronisation) and `event` (a stable name, such as `sync_start`, `listing_done`, `sync_plan`, `transfer_failed`, `sync_end`).
@@ -242,6 +254,12 @@ At the end of each synchronisation, in both modes, the cache file records for ea
 
 A synchronisation without any change sends the listing requests only, plus the connection requests: one `ListObjectsV2` of one key (`max-keys=1`) on the bucket of each S3 storage, and the authentication of each Swift storage (with `delete`, also one `HEAD` of the container). With a `cron`, the storages are connected once at startup, otherwise at the start of each run.
 
+### Listing
+
+A listing page needs the last key of the previous one: a bucket of 350 000 files is 350 sequential requests, and the run time is mostly their latency. From the second run, each side is listed by `listingConcurrency` key ranges in parallel. The bounds of the ranges are keys of the previous listing of that side, recorded in the header of the cache (an even split of its keys). Each range starts after its lower bound (`start-after`, Swift `marker`) and ends at its first key above its upper bound, or at the end of the listing; the ranges cover every possible key, even if the bucket changed since. The ranges are joined in their order: the result is the same as a sequential listing. Every range must be strictly increasing in UTF-8 byte order (no duplicate), within its bounds, and end exactly at the first key listed by the next range: otherwise the side is listed again sequentially (`listing_fallback` warning). Each range reads at most one page beyond its upper bound (`listingConcurrency` − 1 extra requests per side at most).
+
+A side is listed sequentially (`listing_sequential` debug line with its `reason`) on the first run or without a cache (`no_cache`), when it is too small for 2 pages per range (`small`; fewer ranges are used when it fits fewer), and with `listingConcurrency: 1` (`concurrency_1`). `listing_done` gives the number of `ranges` used.
+
 ### Safety
 
 - **Lock**: a lock file is created in the directory of the cache (`sclone-<hash>.lock`, derived from the pair of storages only, with the pid, hostname and start time). Another process synchronising the same storages, in any mode, is refused: a run without `cron` fails, a `cron` run is skipped (`sync_skipped reason=locked`). The lock is refreshed every 30 seconds while held. It is stale, and taken over with a `lock_stale` warning, if it was not refreshed for 90 seconds and its process is no longer running on this host (a recent lock is always alive: a process of another container with the same hostname cannot be checked), or if it was not refreshed for 10 minutes (a process of another host sharing the directory, or a container restarted with a new hostname: the next run may wait up to 10 minutes). The lock is checked again before the first change of a run: if another process took it over in between, the run changes nothing and fails (`Lock lost`). A `cron` run skipped because the lock cannot be created (`lock_error`), or held by a process running for more than 10 minutes, is logged at `error` level.
@@ -249,7 +267,8 @@ A synchronisation without any change sends the listing requests only, plus the c
 - **Deletions confirmed**: a file missing from the listing of one side is deleted from the other side only if a `HEAD` request on the side it is missing from returns `404`. A listing can miss files (eventually consistent Swift listings...): a file still present is not deleted and keeps its cache (`deletion_skipped reason=still_present`); a `HEAD` failing after the retries skips the deletion and fails the run (`reason=not_confirmed`). One `HEAD` per deletion, `transfers` in parallel.
 - **Swift versioning**: a container with `X-Versions-Location` ("stack" mode) restores the previous version of a file on `DELETE`: a deleted file would come back. With `delete`, such a container is detected at connection (`swift_versions_stack` error) and the deletions on this side are refused (`deletion_refused reason=swift_versions_stack`), the uploads still run. `X-History-Location` ("history" mode) is supported.
 - **Listings**: an incomplete or invalid listing page stops the synchronisation before any operation. A Swift listing ends only on an empty page (one more request per listing): a page shorter than requested is not the end on servers capping the pages.
-- **Errors which do not change by retrying** (`400`, `403` such as an archived object or an access denied, `404` on download, `413`) are not retried: they are reported once by run as `transfer_failed reason=permanent` with the S3 error `code`. Network errors, `5xx` and `429` are retried.
+- **Errors which do not change by retrying** (`400`, `403` such as an archived object or an access denied, `413`) are not retried: they are reported once by run as `transfer_failed reason=permanent` with the S3 error `code`. Network errors, `5xx` and `429` are retried.
+- **Files deleted after the listing**: a download returning `404` (the file was deleted while the bucket was listed) is skipped, not a failure: `transfer_skipped reason=source_gone`, counted in `skipped`. Its cache is kept: the next run lists again, and deletes the copy only if confirmed by a `HEAD` (bidirectional, or unidirectional with `delete`). A `403` stays a failure: without the `ListBucket` permission, S3 returns `403` for a missing file.
 
 ### Limits
 

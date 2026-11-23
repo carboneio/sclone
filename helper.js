@@ -147,6 +147,57 @@ function setCacheEntry (files, key, sourceEtag, sourceBytes, targetEtag, targetB
   return _source === undefined && _target === undefined ? 0 : 1;
 }
 
+/** A string which can be an object key: well-formed UTF-16 (sent in a URL), 1024 bytes in UTF-8 at most (S3 limit) */
+const isKey = (key) => typeof key === 'string' && key.isWellFormed() === true && Buffer.byteLength(key) <= 1024;
+
+/** Largest header line read for the bounds of the listings: 2 × 63 keys of 1024 bytes, escaped */
+const CACHE_HEADER_MAX_CHARS = 4 * 1024 * 1024;
+
+/**
+ * Bounds of the previous listings, recorded in the header of the cache (`listing`: { source, target } { objects, bounds }),
+ * read before the listings: only the header line is read. Never fails: undefined if missing, invalid or written for another
+ * synchronisation. Bounds only balance the key ranges listed in parallel: any keys are safe. A side with a bound that cannot be
+ * a key (lone surrogate, over 1024 bytes in UTF-8: the S3 limit) is listed sequentially.
+ */
+function readCacheListing (cachePath, header, callback) {
+  const _stream = fs.createReadStream(cachePath, { encoding: 'utf8', highWaterMark: 64 * 1024 });
+  let _text = '';
+  let _done = false;
+  const _end = (listing) => {
+    if (_done === false) {
+      _done = true;
+      _stream.destroy();
+      return callback(listing);
+    }
+  };
+  _stream.on('error', () => _end());
+  _stream.on('end', () => _end());
+  _stream.on('data', (chunk) => {
+    _text += chunk;
+    const _newLine = _text.indexOf('\n');
+    if (_newLine === -1) {
+      return _text.length > CACHE_HEADER_MAX_CHARS ? _end() : undefined;
+    }
+    let _header = null;
+    try {
+      _header = JSON.parse(_text.slice(0, _newLine));
+    } catch (_err) {
+      return _end();
+    }
+    if (_header?.version !== CACHE_VERSION || _header.mode !== header.mode || _header.source !== header.source || _header.target !== header.target) {
+      return _end();
+    }
+    const _listing = {};
+    for (const _side of ['source', 'target']) {
+      const { objects, bounds } = _header.listing?.[_side] ?? {};
+      if (Number.isSafeInteger(objects) === true && Array.isArray(bounds) === true && bounds.length < 64 && bounds.every(isKey) === true) {
+        _listing[_side] = { objects, bounds };
+      }
+    }
+    return _end(_listing);
+  });
+}
+
 /** Remove the cache of every listed object: a cache found invalid while loading is ignored as a whole */
 function clearCache (files) {
   for (const _listing of [files.source, files.target]) {
@@ -553,6 +604,7 @@ module.exports = {
   defaultCacheFilename,
   lockPath,
   loadCache,
+  readCacheListing,
   saveCache,
   acquireLock,
   lockLostError,

@@ -12,7 +12,7 @@ A ready-to-import dashboard is available in [`grafana-dashboard.json`](./grafana
 ts=2026-11-19T09:57:25.071Z level=info job=my-sync run=089a9f5b event=sync_start msg="Synchronisation started" mode=unidirectional source=s3:my-bucket target=s3:my-bucket-copy delete=true dry_run=false cron=true
 ts=2026-11-19T09:57:25.087Z level=info job=my-sync run=089a9f5b event=listing_done msg="target listed" side=target storage=s3 bucket=my-bucket-copy objects=5 bytes=15000 duration_ms=4
 ts=2026-11-19T09:57:25.088Z level=info job=my-sync run=089a9f5b event=listing_done msg="source listed" side=source storage=s3 bucket=my-bucket objects=5 bytes=15000 duration_ms=4
-ts=2026-11-19T09:57:25.089Z level=info job=my-sync run=089a9f5b event=sync_end msg="Synchronisation success" status=success duration_ms=16 uploaded=0 uploaded_bytes=0 deleted=0 failed=0 source_objects=5 target_objects=5 source_bytes=15000 target_bytes=15000
+ts=2026-11-19T09:57:25.089Z level=info job=my-sync run=089a9f5b event=sync_end msg="Synchronisation success" status=success duration_ms=16 uploaded=0 uploaded_bytes=0 deleted=0 skipped=0 failed=0 source_objects=5 target_objects=5 source_bytes=15000 target_bytes=15000
 ```
 
 - The first fields are always, in this order: `ts` (ISO 8601, UTC, milliseconds), `level` (`debug`, `info`, `warn`, `error`), `job`, `run` (only during a synchronisation), `event`, `msg`.
@@ -30,8 +30,10 @@ ts=2026-11-19T09:57:25.089Z level=info job=my-sync run=089a9f5b event=sync_end m
 | `storage_connected` | info | connection of a storage: once at startup with a `cron`, at the start of the run otherwise | `side` (`source`, `target`), `storage` (`s3`, `swift`), `bucket` |
 | `storage_connect_failed` | error | a storage cannot be connected. Without `cron` the run ends with `sync_end status=failed` | `side`, `storage`, `bucket`, `error` |
 | `cron_scheduled` | info | once at startup with a `cron` | `cron` (the expression, such as `*/3 * * * *`) |
-| `listing_done` | info | listing of one storage done | `side`, `storage`, `bucket`, `objects`, `bytes` (sum of the sizes), `duration_ms` |
-| `listing_retry` | warn | a listing page failed and is requested again | `side`, `storage`, `bucket`, `retry`, `max_retry`, `delay_ms`, `error` |
+| `listing_done` | info | listing of one storage done | `side`, `storage`, `bucket`, `objects`, `bytes` (sum of the sizes), `duration_ms`, `ranges` (key ranges listed in parallel, `1`: sequential) |
+| `listing_sequential` | debug | a storage is listed sequentially | `side`, `storage`, `bucket`, `reason` (`no_cache`: first run, `small`, `concurrency_1`) |
+| `listing_fallback` | warn | a listing by key ranges is invalid (not strictly increasing, overlapping or non-contiguous ranges, page over twice the page size: `reason=oversized_page`): the storage is listed again sequentially | `side`, `storage`, `bucket`, `reason` |
+| `listing_retry` | warn | a listing page, or the S3 connection check (`op=connect`), failed and is requested again | `side`, `storage`, `bucket`, `op` (connection check only), `retry`, `max_retry`, `delay_ms`, `error` |
 | `sync_plan` | info, debug if empty | operations computed. `upload_*` are new files, `update_*` changed files, `upload_*_bytes` the size of both | `upload_target`, `update_target`, `delete_target`, `upload_source`, `update_source`, `delete_source`, `upload_target_bytes`, `upload_source_bytes`, `conflicts` (bidirectional, if any), `etag_resolved` (number of `HEAD` requests sent to resolve opaque etags, if any) |
 | `sync_conflict` | warn | bidirectional: both sides changed (or a file differs on both sides without cache), at most 100 lines per run | `key`, `reason` (`both_new`, `both_modified`, `deleted_modified`), `winner` (`source`, `target`), `source_etag`, `source_bytes`, `source_lastmodified`, `target_etag`, `target_bytes`, `target_lastmodified` (`*_etag=deleted` for a deleted version) |
 | `deletion_refused` | error | the plan exceeds `maxDeletion`, deletes files while a side is empty (listed empty, or none of its listed files was synchronised: `allowEmptySide`; one line per guard), or deletes files on a Swift container with `X-Versions-Location`: the refused deletions are not done (all of them for `max_deletion` and `empty_side`, the ones of `side` for `swift_versions_stack`), the uploads still run, and the run fails | `reason` (`max_deletion`, `empty_side`, `swift_versions_stack`), `side` (the empty side for `empty_side`, the refused side for `swift_versions_stack`), `delete_target`, `delete_source` (planned), `max_deletion` |
@@ -39,8 +41,9 @@ ts=2026-11-19T09:57:25.089Z level=info job=my-sync run=089a9f5b event=sync_end m
 | `swift_versions_stack` | error | at connection, with `delete`: the Swift container has `X-Versions-Location` (a `DELETE` restores the previous version). The deletions on this side are refused for the life of the process (`deletion_refused`) | `side`, `storage`, `bucket`, `versions_location` |
 | `etag_resolved` | debug | opaque etags resolved with `HEAD` requests | `resolved`, `unresolved`, `duration_ms` |
 | `transfer_failed` | warn | an operation failed (one line per attempt, at most `logMaxFailures` per queue and run) | `queue`, `op` (`upload`, `delete`), `direction` (`source_to_target`, `target_to_source`), `phase` (`download`, `upload`, `delete`), `key` (the first key of a deleted chunk), `count` (deleted chunks only), `status` (HTTP status, when known), `code` (S3 error code such as `AccessDenied`, or network error code such as `ECONNRESET`, when known), `reason` (`permanent`: not retried, `too_large`: larger than 5 GiB, the limit of a single upload), `error`, `try` (0 = first attempt) |
-| `transfer_failed_summary` | warn | end of a queue, if `transfer_failed` lines were omitted | `queue`, `op`, `direction`, `omitted`, `max` |
-| `sync_end` | info, error if failed, warn if interrupted | end of each run: the single line used by most panels. `interrupted`: the process received `SIGTERM` (`systemctl stop`/`restart`) or `SIGINT` during the run; the lock is released, the cache is not saved (the previous one is kept), and the process exits with code 143 (`SIGTERM`) or 130 (`SIGINT`). It counts as not successful in the success rate and the last run status | `status` (`success`, `failed`, `dry_run`, `interrupted`), `duration_ms`, `uploaded`, `uploaded_bytes`, `deleted`, `failed` (done when the run ended or was interrupted), `source_objects`, `target_objects`, `source_bytes`, `target_bytes` (as listed at the start of the run, absent if the listing failed or was not done), `error` (if failed), `signal` (`SIGTERM`, `SIGINT`: if interrupted) |
+| `transfer_skipped` | warn | a file not copied by this run, which is not a failure: deleted after the listing (download `404`). Its cache is kept, the next run plans it again. Shares the `logMaxFailures` cap of `transfer_failed` | `queue`, `op`, `direction`, `phase` (`download`), `key`, `status` (`404`), `reason` (`source_gone`), `error` |
+| `transfer_failed_summary` | warn | end of a queue, if `transfer_failed` or `transfer_skipped` lines were omitted | `queue`, `op`, `direction`, `omitted`, `max` |
+| `sync_end` | info, error if failed, warn if interrupted | end of each run: the single line used by most panels. `interrupted`: the process received `SIGTERM` (`systemctl stop`/`restart`) or `SIGINT` during the run; the lock is released, the cache is not saved (the previous one is kept), and the process exits with code 143 (`SIGTERM`) or 130 (`SIGINT`). It counts as not successful in the success rate and the last run status | `status` (`success`, `failed`, `dry_run`, `interrupted`), `duration_ms`, `uploaded`, `uploaded_bytes`, `deleted`, `skipped` (files deleted after the listing, see `transfer_skipped`), `failed` (done when the run ended or was interrupted), `source_objects`, `target_objects`, `source_bytes`, `target_bytes` (as listed at the start of the run, absent if the listing failed or was not done), `error` (if failed), `signal` (`SIGTERM`, `SIGINT`: if interrupted) |
 | `sync_skipped` | warn, error | a `cron` tick while the previous run is still running, or while another process synchronises the same storages. `error` for `lock_error`, and for `locked` when the holder runs for more than 10 minutes | `reason` (`already_running`, `locked`, `lock_error`: the lock file cannot be created, such as a read-only or missing directory), `running_since_ms`, `pid` (owner of the lock), `held_ms` (age of the lock holder), `error`. An `already_running` line carries the `run` of the running synchronisation |
 | `lock_stale` | warn | a stale lock file is taken over: not refreshed for 90 seconds and its process no longer runs on this host, or not refreshed for 10 minutes | `path`, `pid`, `hostname`, `since` |
 | `cache_loaded`, `cache_saved` | debug | cache read / written | `path`, `objects`, `duration_ms` |
@@ -172,19 +175,60 @@ sum by (sclone_job, reason) (count_over_time({unit=~"sclone.*"} |= "event=deleti
 
 Every panel has a description (the ⓘ tooltip): what it measures, the normal value, and when to worry / what to do.
 The duration and "time since last success" thresholds are examples for a cron every few minutes: adjust them to your
-schedule and bucket sizes. The panels, by row:
+schedule and bucket sizes. The rows follow the questions you ask, so the first screen tells whether everything is healthy:
 
 | Row | Panels |
 |---|---|
-| 🟢 Health | Last run status (Success / Failed), Time since last success, Success rate (green ≥ 99 %, orange ≥ 95 %), Runs (success, failed, interrupted, dry runs, skipped), Refused deletions, Success rate per job, Skipped runs by reason (`already_running`, `locked`, `lock_error`), Refused deletions by reason (`max_deletion`, `empty_side`, `swift_versions_stack`), Postponed deletions (`deletion_skipped`: `still_present`, `not_confirmed`), Blocking lock age (`held_ms`, red above the 10 minutes stale delay) |
-| 🔴 Errors | Failed files, Files too large (`transfer_failed reason=too_large`), Lock errors, Cache errors and stale locks (`cache_error`, `lock_stale`), Failures by HTTP status, Connection and listing failures (`storage_connect_failed`, `listing_retry`), Top errors, Top jobs by failed runs, Bidirectional conflicts (`sync_conflict`), Error and warning logs |
-| ⏱️ Performance | Run duration p50 / p95, Listing duration p95, Upload throughput (bytes/s averaged over 15 minutes), Uploaded volume, Files transferred (uploaded, deleted, failed) |
-| 🪣 Buckets | Objects per bucket, Bytes per bucket |
+| 🟢 Health | Last run (Success / Failed / Interrupted), Time since last success, Success rate (green ≥ 99 %, orange ≥ 95 %), Re-uploaded files (max per run, see below), Refused deletions, Runs per hour (stacked by result: success, failed, interrupted, dry run, skipped; a gap means missing runs) |
+| 🔴 Errors | Failed files, Files too large (`transfer_failed reason=too_large`), Lock errors, Cache errors and stale locks (`cache_error`, `lock_stale`), Failures by HTTP status, Connection and listing failures (`storage_connect_failed`, `listing_retry`), Top errors, Error and warning logs |
+| ⏱️ Performance | Run duration p50 / p95, Listing duration p95, Files transferred (uploaded, deleted, failed), Re-uploaded files per run, Upload throughput, Uploaded volume |
+| 🪣 Buckets | Target − source gap (objects and bytes), Objects per bucket, Bytes per bucket |
+| 🖥️ Host (optional, Prometheus, collapsed) | Sync services (systemd state), Available memory and OOM kills |
+| 🔎 Details (collapsed) | Skipped runs by reason (`already_running`, `locked`, `lock_error`), Bidirectional conflicts (`sync_conflict`), Refused deletions by reason (`max_deletion`, `empty_side`, `swift_versions_stack`), Postponed deletions (`deletion_skipped`: `still_present`, `not_confirmed`), Blocking lock age (`held_ms`, red above the 10 minutes stale delay) |
 
+- **Re-uploaded files**: `update_target` + `update_source` of `sync_plan`, the files already present on the other side
+  and copied again. Close to 0 is normal (orange above 100 per run, red above 1,000); the same high number on every run
+  means files are copied in a loop. An empty plan is logged at `debug` level, so no `sync_plan` line means 0.
+- **Target − source gap**: objects (and bytes) of the target minus the source, from `listing_done`. About 0 with
+  `delete: true`; positive and growing slowly with `delete: false`. A sudden jump, or a growing gap with `delete: true`,
+  needs a look.
 - Variables: `Loki stream selector`, `Job (regex)`, and `Event (regex, logs)`, which filters the logs panel on the
   `event` field (for example `deletion_refused` or `transfer_failed|sync_skipped`).
 - Annotations: failed runs (with their `error`) and refused deletions are marked on every time series.
 - The dashboard links to this page.
+
+### Host row (optional, Prometheus)
+
+The collapsed **Host** row needs [node_exporter](https://github.com/prometheus/node_exporter) scraped by Prometheus,
+with the systemd collector enabled (`--collector.systemd`) for *Sync services*; without it the panels show *No data*
+and the rest of the dashboard works as usual. Pick the Prometheus datasource in the `Prometheus (host row)` variable,
+set `Instance (regex)` to your servers (`instance` label) and `Unit (regex)` to your systemd unit names (default
+`sclone.*`). The queries:
+
+```promql
+max by (instance, name) (node_systemd_unit_state{instance=~"$instance", name=~"$unit_regex", state="active"})
+node_memory_MemAvailable_bytes{instance=~"$instance"}
+increase(node_vmstat_oom_kill{instance=~"$instance"}[$__rate_interval])
+```
+
+During the transfers sclone holds up to `transfers` × about 2.2 × the file size in memory, plus the listings of both
+sides: an OOM kill usually shows as a run without `sync_end`.
+
+### Label dropdowns instead of the stream selector
+
+The `Loki stream selector` textbox works with any labels. If your log shipper sets stable labels, for example `host`
+and `unit` with systemd/journald, you can replace it with dropdowns (Dashboard settings > Variables):
+
+1. Add a **Query** variable `host` on the Loki datasource: query type *Label values*, label `host`, stream selector
+   `{unit=~"sclone.*"}`, *Multi-value* and *Include All option* on, custom all value `.*`.
+2. Add a **Query** variable `unit`: label `unit`, stream selector `{unit=~"sclone.*", host=~"${host:pipe}"}`,
+   *Multi-value* and *Include All* on, custom all value `sclone.*`.
+3. In the JSON model (Dashboard settings > JSON Model), replace every `${selector}` with
+   `{host=~"${host:pipe}", unit=~"${unit:pipe}"}`, save, then delete the `selector` variable.
+   The `Job` variable is then redundant when there is one sclone instance per unit: leave it on `.*`.
+
+With the same names on the Prometheus side (`instance` equal to the Loki `host`), the Host row can use
+`instance=~"${host:pipe}"` and `name=~"${unit:pipe}"` too.
 
 ## Several instances on the same server
 

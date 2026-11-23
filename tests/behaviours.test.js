@@ -400,7 +400,7 @@ describe('Behaviours learned from the real providers', function () {
         nock(URL_B).put('/invoices/a.pdf').reply(500, '').put('/invoices/a.pdf').reply(200, '');
         storage.syncFiles([{ key: 'a.pdf', bytes: 5 }], [], [], [], { mode: UNI, retry: 1 }, function (err, stats) {
           assert.strictEqual(err, undefined);
-          assert.deepStrictEqual(stats, { uploaded: 1, uploaded_bytes: 5, deleted: 0, failed: 0 });
+          assert.deepStrictEqual(stats, { uploaded: 1, uploaded_bytes: 5, deleted: 0, skipped: 0, failed: 0 });
           assert.deepStrictEqual(logs.filter('transfer_failed').map((l) => [l.phase, l.status, l.reason, l.try]), [['upload', 500, undefined, 0]]);
           assert.strictEqual(nock.pendingMocks().length, 0);
           done();

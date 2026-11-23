@@ -430,9 +430,15 @@ describe("storage", function() {
           .put('/invoices/file.pdf')
           .reply(200, '');
 
-        storage.syncFiles([{ key: 'file.pdf' }], [], [], [], { mode: helper.MODES.UNI }, function(err) {
-          assert.strictEqual(err instanceof Error, true);
-          assert.strictEqual(err.toString().includes('upload-from-source-to-target | 1 operation(s) failed'), true, err.toString());
+        storage.syncFiles([{ key: 'file.pdf' }], [], [], [], { mode: helper.MODES.UNI }, function(err, stats) {
+          if (_status === 404) {
+            /** Deleted after the listing: skipped, not a failure */
+            assert.strictEqual(err, undefined);
+            assert.strictEqual(stats.skipped, 1);
+          } else {
+            assert.strictEqual(err instanceof Error, true);
+            assert.strictEqual(err.toString().includes('upload-from-source-to-target | 1 operation(s) failed'), true, err.toString());
+          }
           assert.strictEqual(nockSwiftDownload.pendingMocks().length, 0);
           assert.strictEqual(nockS3Upload.pendingMocks().length, 1);
           nock.cleanAll();
@@ -564,7 +570,7 @@ describe("storage", function() {
           assert.strictEqual(err instanceof Error, true);
           assert.strictEqual(err.toString().includes('upload-from-source-to-target | 1 operation(s) failed'), true, err.toString());
           assert.strictEqual(nockUpload.pendingMocks().length, 0);
-          assert.deepStrictEqual(stats, { uploaded: 0, uploaded_bytes: 0, deleted: 0, failed: 1 });
+          assert.deepStrictEqual(stats, { uploaded: 0, uploaded_bytes: 0, deleted: 0, skipped: 0, failed: 1 });
           const _failures = _logs.filter('transfer_failed');
           assert.deepStrictEqual(_failures.map((l) => [l.key, l.phase, l.status, l.code, l.reason, l.try]), [['a.pdf', 'upload', 403, 'AccessDenied', 'permanent', 0]]);
           assert.strictEqual(_logs.filter('queue_retry').length, 0);
@@ -595,7 +601,19 @@ describe("storage", function() {
         });
       });
 
-      for (const [_status, _code] of [[403, 'InvalidObjectState'], [400, 'InvalidRequest'], [404, 'NoSuchKey']]) {
+      it('should skip, without retrying, a download refused with a 404 (NoSuchKey): deleted after the listing', function(done) {
+        const nockDownload = nock(urlS3).get('/invoices/gone.pdf').reply(404, _s3Error('NoSuchKey'), { 'content-type': 'application/xml' });
+        storage.syncFiles([], [], [{ key: 'gone.pdf', bytes: 5 }], [], { mode: helper.MODES.BI, retry: 3 }, function(err, stats) {
+          assert.strictEqual(err, undefined);
+          assert.strictEqual(nockDownload.pendingMocks().length, 0);
+          assert.deepStrictEqual(stats, { uploaded: 0, uploaded_bytes: 0, deleted: 0, skipped: 1, failed: 0 });
+          assert.deepStrictEqual(_logs.filter('transfer_failed'), []);
+          assert.deepStrictEqual(_logs.filter('transfer_skipped').map((l) => [l.key, l.phase, l.status, l.reason]), [['gone.pdf', 'download', 404, 'source_gone']]);
+          done();
+        });
+      });
+
+      for (const [_status, _code] of [[403, 'InvalidObjectState'], [400, 'InvalidRequest']]) {
         it(`should not retry a download refused with a ${_status} (${_code})`, function(done) {
           const nockDownload = nock(urlS3).get('/invoices/archived.pdf').reply(_status, _s3Error(_code), { 'content-type': 'application/xml' });
           storage.syncFiles([], [], [{ key: 'archived.pdf', bytes: 5 }], [], { mode: helper.MODES.BI, retry: 3 }, function(err, stats) {
@@ -739,7 +757,7 @@ describe("storage", function() {
           assert.strictEqual(_summary[0].queue, 'upload-from-source-to-target');
           assert.strictEqual(_summary[0].omitted, 4);
           assert.strictEqual(_summary[0].max, 2);
-          assert.deepStrictEqual(stats, { uploaded: 0, uploaded_bytes: 0, deleted: 0, failed: 3 });
+          assert.deepStrictEqual(stats, { uploaded: 0, uploaded_bytes: 0, deleted: 0, skipped: 0, failed: 3 });
           done();
         });
       });
@@ -753,7 +771,7 @@ describe("storage", function() {
 
         storage.syncFiles([{ key: 'a.pdf' }, { key: 'b.pdf' }], [], [], [], { mode: helper.MODES.UNI, retry: 1, transfers: 1 }, function(err, stats) {
           assert.strictEqual(err, undefined);
-          assert.deepStrictEqual(stats, { uploaded: 2, uploaded_bytes: 14, deleted: 0, failed: 0 });
+          assert.deepStrictEqual(stats, { uploaded: 2, uploaded_bytes: 14, deleted: 0, skipped: 0, failed: 0 });
           assert.strictEqual(_logs.filter('transfer_failed').length, 1);
           assert.strictEqual(_logs.filter('queue_end')[0].level, 'info');
           done();
@@ -1104,17 +1122,112 @@ describe("storage", function() {
       });
     });
 
-    it('should return an error if a file transfer fails, without retrying a permanent error (404 on download)', function(done) {
+    describe('S3 connection check retried like a listing page', function() {
+      const _query = { 'list-type': '2', 'max-keys': '1' };
+      const _ok = '<?xml version="1.0" encoding="UTF-8"?><ListBucketResult><Name>invoices</Name><KeyCount>0</KeyCount><MaxKeys>1</MaxKeys><IsTruncated>false</IsTruncated></ListBucketResult>';
+      let _logs = null;
+      beforeEach(function() {
+        nock.cleanAll();
+        _logs = captureLogs();
+      });
+      afterEach(function() {
+        _logs.restore();
+        nock.cleanAll();
+      });
+
+      /** Connect the source after the `failures` answers, then a 200 if `recover` */
+      function check (failures, recover, overrides, callback) {
+        for (const _failure of failures) {
+          _failure(nock(urlS3).get('/invoices').query(_query));
+        }
+        const _success = recover ? nock(urlS3).get('/invoices').query(_query).reply(200, _ok, { 'content-type': 'application/xml' }) : null;
+        helper.loadConfig(path.join(__dirname, 'config.test-s3-s3.json'), function(err, config) {
+          assert.strictEqual(err, null);
+          storage.connection({ ...config, ...overrides }, 'source', (err) => callback(err, _logs.filter('listing_retry'), _success));
+        });
+      }
+
+      const _transient = {
+        '500'          : (scope) => scope.reply(500, '<?xml version="1.0" encoding="UTF-8"?><Error><Code>InternalError</Code></Error>', { 'content-type': 'application/xml' }),
+        'HTML page'    : (scope) => scope.reply(200, '<html><body>Bad gateway</body></html>', { 'content-type': 'text/html' })
+      };
+      for (const [name, failure] of Object.entries(_transient)) {
+        it(`should connect after a ${name}, logged by listing_retry with op=connect`, function(done) {
+          check([failure], true, {}, (err, retries, success) => {
+            assert.strictEqual(err, undefined);
+            assert.strictEqual(success.isDone(), true);
+            assert.strictEqual(retries.length >= 1, true);
+            assert.deepStrictEqual(retries.map((line) => [line.op, line.side, line.level]), retries.map(() => ['connect', 'source', 'warn']));
+            assert.strictEqual(_logs.filter('storage_connected').length, 1);
+            done();
+          });
+        });
+      }
+
+      it('should connect after socket resets, logged by listing_retry with op=connect', function(done) {
+        /** Real local HTTP, nock deactivated: the sockets of the first two requests are reset (the second one is the transport retry of rock-req) */
+        let _requests = 0;
+        const _server = require('http').createServer((req, res) => {
+          if (++_requests <= 2) {
+            return req.socket.destroy();
+          }
+          res.writeHead(200, { 'content-type': 'application/xml' });
+          res.end(_ok);
+        });
+        nock.restore();
+        _server.listen(0, '127.0.0.1', () => {
+          helper.loadConfig(path.join(__dirname, 'config.test-s3-s3.json'), function(err, config) {
+            assert.strictEqual(err, null);
+            const _config = { ...config, source: { ...config.source, url: `http://127.0.0.1:${_server.address().port}` } };
+            storage.connection(_config, 'source', (err) => {
+              _server.close();
+              nock.activate();
+              assert.strictEqual(err, undefined);
+              assert.strictEqual(_requests, 3);
+              assert.deepStrictEqual(_logs.filter('listing_retry').map((line) => [line.op, line.side]), [['connect', 'source']]);
+              assert.strictEqual(_logs.filter('storage_connected').length, 1);
+              done();
+            });
+          });
+        });
+      });
+
+      it('should fail with the same error when the 503 lasts longer than the retries (listRetry)', function(done) {
+        const _503 = (scope) => scope.times(20).reply(503, '<?xml version="1.0" encoding="UTF-8"?><Error><Code>SlowDown</Code><Message>Please reduce your request rate.</Message></Error>', { 'content-type': 'application/xml' });
+        check([_503], false, { listRetry: 2 }, (err, retries) => {
+          /** The message of a connection without retry: a 503 makes the single storage unavailable. tiny-storage-client 4.1 adds why (a throttle) after the 4.0 message */
+          assert.strictEqual(err, '[S3 source] Error: Error: All S3 storages are not available | Throttled by the storage (slow down)');
+          assert.strictEqual(retries.length, 2);
+          assert.strictEqual(_logs.filter('storage_connected').length, 0);
+          done();
+        });
+      });
+
+      for (const [status, code] of [[403, 'AccessDenied'], [404, 'NoSuchBucket'], [403, 'SignatureDoesNotMatch']]) {
+        it(`should fail at once on a ${status} ${code}, without retry`, function(done) {
+          const _error = (scope) => scope.reply(status, `<?xml version="1.0" encoding="UTF-8"?><Error><Code>${code}</Code><Message>refused</Message></Error>`, { 'content-type': 'application/xml' });
+          check([_error], true, {}, (err, retries, success) => {
+            assert.strictEqual(err, `[S3 source] Storage error | Status ${status} | Code: ${code} | Message: refused`);
+            assert.strictEqual(retries.length, 0);
+            assert.strictEqual(success.isDone(), false);
+            done();
+          });
+        });
+      }
+    });
+
+    it('should skip a file deleted after the listing (404 on download), without retrying it nor failing the synchronisation', function(done) {
       /** Download from the target (S3): the file was deleted after the listing, not requested again */
       const nockS3Download = nock(urlS3)
         .get('/invoices/missing-file.txt')
         .reply(404);
+      const _object = { key: 'missing-file.txt' };
 
-      storage.syncFiles([], [], [{ key: 'missing-file.txt' }], [], { mode: helper.MODES.BI, retry: 1 }, function(err) {
-        assert.strictEqual(err instanceof Error, true);
-        assert.strictEqual(err.toString().includes('Synchronisation errors'), true);
-        assert.strictEqual(err.toString().includes('upload-from-target-to-source'), true);
-        assert.strictEqual(err.toString().includes('1 operation(s) failed'), true);
+      storage.syncFiles([], [], [_object], [], { mode: helper.MODES.BI, retry: 1 }, function(err, stats) {
+        assert.strictEqual(err, undefined);
+        assert.deepStrictEqual(stats, { uploaded: 0, uploaded_bytes: 0, deleted: 0, skipped: 1, failed: 0 });
+        /** Not copied: its cache is kept, the next run plans it again */
+        assert.strictEqual(_object.copied, undefined);
         assert.strictEqual(nockS3Download.pendingMocks().length, 0);
         done();
       });

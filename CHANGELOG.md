@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file. This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 2.1.0
+
+- **Faster listings**: from the second run, large buckets are listed in parallel by key ranges (new option `listingConcurrency`, default `4`). Listing 20 000 files on OVHcloud S3: 20 s → 4.7 s with `8`. The listing stays exact: if anything looks wrong, sclone lists sequentially as before (`listing_fallback` warning).
+- **A file deleted during the listing no longer fails the run**: it is skipped (`transfer_skipped` warning, new `skipped` field in `sync_end`) and handled by the next run.
+- The S3 connection check is retried on temporary errors (5xx, 429, network) instead of failing the run.
+- A provider listing pages in a loop now fails the run instead of listing forever.
+- **Windows binary**: each release ships `sclone-<version>-win.exe`. Stop a run with Ctrl+C.
+- The 2.1 cache stays readable by 2.0.
+- Updated dependencies: `tiny-storage-client` 4.0.0 → 4.1.0 (with `rock-req` 5.4.0), dev `@yao-pkg/pkg` 6.25.0 → 6.26.0. A `503` throttle still failing after the retries now reads `All S3 storages are not available | Throttled by the storage (slow down)`.
+
 ## 2.0.0
 
 > ⚠️ **Requires Node.js 26 or later** (the release binaries embed Node 26). Uses the built-in `Error.isError()` and `buffer.isUtf8()`, with no change to the logs or the synchronisation.

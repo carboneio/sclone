@@ -27,6 +27,14 @@ let logQueueStatus = false;
 /** Number of retries of a listing page, and delay before the first retry, doubled on each retry: 1s, 2s, 4s, 8s, 16s */
 let listRetry = 5;
 let listRetryDelay = 1000;
+/** Key ranges of a side listed in parallel (`listingConcurrency`), and its maximum */
+const LISTING_CONCURRENCY = 4;
+const MAX_LISTING_CONCURRENCY = 64;
+let listingConcurrency = LISTING_CONCURRENCY;
+/** Parts of a listing whose bounds are recorded in the cache: the bounds of N ranges are picked among them */
+const LISTING_PARTS = 64;
+/** A range must hold at least this number of pages, otherwise the listing uses fewer ranges, or one */
+const MIN_PAGES_PER_RANGE = 2;
 /** Options of every queue (cqueue >= 1.1.0, ignored by older versions): no error file by default, the logs already carry the causes */
 let queueOptions = {};
 /** Internal queue: its start/end are covered by the `listing_done` events */
@@ -80,6 +88,7 @@ function connection (config, type, callback) {
   integrityCheck = config?.integrityCheck === true;
   listRetry = config?.listRetry ?? 5;
   listRetryDelay = config?.listRetryDelay ?? 1000;
+  listingConcurrency = Number.isInteger(config?.listingConcurrency) ? Math.min(Math.max(config.listingConcurrency, 1), MAX_LISTING_CONCURRENCY) : LISTING_CONCURRENCY;
   if (config?.test === true) {
     logQueueStatus = false;
   }
@@ -101,18 +110,26 @@ function connection (config, type, callback) {
       return checkSwiftVersioning(type, callback);
     });
   } else if (storages[type].name === S3) {
-    /** One key of the configured bucket: checks the credentials and the bucket, without the ListAllMyBuckets permission (credentials scoped to a bucket) */
-    return storages[type].listFiles(storages[type].bucket, { queries: { 'max-keys': 1 } }, (err, resp) => {
+    /**
+     * One key of the configured bucket: checks the credentials and the bucket, without the ListAllMyBuckets permission (credentials scoped to a bucket).
+     * Retried like a listing page: a temporary error (network, 5xx, 429, proxy page) does not fail the run, a 403 or a 404 fails at once
+     */
+    return requestListPage(storages[type], storages[type].bucket, (done) => storages[type].listFiles(storages[type].bucket, { queries: { 'max-keys': 1 } }, (err, resp) => {
       if (err) {
-        return callback(`[S3 ${type}] Error: ` + err?.toString());
+        return done(`[S3 ${type}] Error: ` + err?.toString());
       }
       if (resp?.statusCode !== 200) {
         /** Only the status and the error code/message: a SignatureDoesNotMatch body carries the access key id and the string to sign */
-        return callback(`[S3 ${type}] Storage error | Status ${resp?.statusCode} | Code: ${resp?.body?.error?.code ?? 'unknown'} | Message: ${resp?.body?.error?.message ?? 'unknown'}`);
+        return done(`[S3 ${type}] Storage error | Status ${resp?.statusCode} | Code: ${resp?.body?.error?.code ?? 'unknown'} | Message: ${resp?.body?.error?.message ?? 'unknown'}`, isPermanentListingStatus(resp?.statusCode));
+      }
+      return done(null);
+    }), (err) => {
+      if (err) {
+        return callback(err);
       }
       logStorageConnected(type);
       return callback();
-    });
+    }, 'connect');
   } else {
     return callback(`Storage "${type}" missing a storage "name" on the "config.json"`);
   }
@@ -180,15 +197,16 @@ function isPermanentListingStatus (statusCode) {
  * was lost on a single error, and the whole synchronisation with it.
  *
  * @param {Function} requestPage (done) => {}, with done(err, isPermanent)
+ * @param {String} [op] `connect` for the connection check, logged by `listing_retry`
  */
-function requestListPage (storage, container, requestPage, callback, retry = 0) {
+function requestListPage (storage, container, requestPage, callback, op, retry = 0) {
   requestPage(function (err, isPermanent) {
     if (err && isPermanent !== true && retry < listRetry) {
       const _delay = listRetryDelay * 2 ** retry;
-      logger.log('warn', 'listing_retry', `Listing page failed, retry ${retry + 1}/${listRetry}`, {
-        side: storage?.side, storage: storage?.name, bucket: container, retry: retry + 1, max_retry: listRetry, delay_ms: _delay, error: err.toString()
+      logger.log('warn', 'listing_retry', `${op === 'connect' ? 'Connection check' : 'Listing page'} failed, retry ${retry + 1}/${listRetry}`, {
+        side: storage?.side, storage: storage?.name, bucket: container, ...(op && { op }), retry: retry + 1, max_retry: listRetry, delay_ms: _delay, error: err.toString()
       });
-      return setTimeout(() => requestListPage(storage, container, requestPage, callback, retry + 1), _delay);
+      return setTimeout(() => requestListPage(storage, container, requestPage, callback, op, retry + 1), _delay);
     }
     return callback(err);
   });
@@ -197,18 +215,16 @@ function requestListPage (storage, container, requestPage, callback, retry = 0) 
 /**
  * List the files of a container, page by page. Each page is checked, then given to `options.onPage(list)` before the next
  * one is requested: the pages are not kept in memory until the end. A page is given once, after its successful request
- * (a retried page is requested again before). `onPage` returns an Error to stop the listing, not retried.
+ * (a retried page is requested again before). `onPage` returns an Error to stop the listing, not retried, or `true` to end
+ * it after this page (key range read).
  */
 const listFiles = {
   [S3]: function(storage, container, options, callback) {
     /** List files options */
-    options.metadata =  options?.metadata ?? false;
     options.queries = options?.queries ?? {};
     options.autoPaging = options?.autoPaging ?? false;
     let _isTruncated = false;
     requestListPage(storage, container, function (done) {
-      /** The fallback counter of tiny-storage-client is kept in the options: each request must start from the main storage */
-      options.try = 0;
       storage.listFiles(container, options, function (err, resp) {
         if (err) {
           return done(err);
@@ -233,10 +249,13 @@ const listFiles = {
           if (_lastKey === undefined || _lastKey === options.queries['start-after']) {
             return done(new Error(`Invalid listing: the page is truncated but does not list any new file | Bucket: ${container}`));
           }
-          options.queries['start-after'] = _lastKey;
+          /** A copy: a parsed key is a slice of the XML page, it would keep the whole page in memory until the next one */
+          options.queries['start-after'] = copyString(_lastKey);
         }
         /** A page refused by `onPage` is not retried */
-        return done(options.onPage(_listResult), true);
+        const _result = options.onPage(_listResult);
+        _isTruncated = _isTruncated === true && _result !== true;
+        return done(_result === true ? null : _result, true);
       });
     }, function (err) {
       if (err) {
@@ -277,7 +296,9 @@ const listFiles = {
           options.queries.marker = _lastName;
         }
         /** A page refused by `onPage` is not retried */
-        return done(options.onPage(_listResult), true);
+        const _result = options.onPage(_listResult);
+        _hasNextPage = _hasNextPage === true && _result !== true;
+        return done(_result === true ? null : _result, true);
       });
     }, function (err) {
       if (err) {
@@ -451,8 +472,8 @@ function uploadedEtag (resp, body) {
 }
 
 /** A transfer error which does not change by retrying */
-function isPermanentError (phase, err) {
-  return PERMANENT_STATUSES.has(err?.status) === true || (phase === 'download' && err?.status === 404) || err?.code === 'EntityTooLarge';
+function isPermanentError (err) {
+  return PERMANENT_STATUSES.has(err?.status) === true || err?.code === 'EntityTooLarge';
 }
 
 /**
@@ -476,39 +497,46 @@ function createFailureReporter (queueName, op, direction, maxFailures) {
       if (reason !== undefined) {
         this.permanent++;
       }
-      if (_logged >= maxFailures) {
-        _omitted++;
-        return;
-      }
-      _logged++;
-      const _isChunk = Array.isArray(element);
-      logger.log('warn', 'transfer_failed', `${op} failed`, {
-        queue    : queueName,
-        op       : op,
-        direction: direction,
-        phase    : phase,
-        key      : _isChunk ? element[0]?.key : element?.key,
-        count    : _isChunk ? element.length : undefined,
-        status   : err?.status,
-        code     : err?.code,
-        reason   : reason,
-        error    : err?.toString(),
-        try      : _try
-      });
+      _log('transfer_failed', `${op} failed`, element, phase, err, reason, _try);
+    },
+    /** Not a failure: the object cannot be copied by this run (deleted since the listing), the next run plans it again */
+    skip (element, phase, err, reason) {
+      _log('transfer_skipped', `${op} skipped`, element, phase, err, reason, undefined);
     },
     end () {
       if (_omitted > 0) {
-        logger.log('warn', 'transfer_failed_summary', `${_omitted} more failed operation(s) not logged`, { queue: queueName, op: op, direction: direction, omitted: _omitted, max: maxFailures });
+        logger.log('warn', 'transfer_failed_summary', `${_omitted} more failed or skipped operation(s) not logged`, { queue: queueName, op: op, direction: direction, omitted: _omitted, max: maxFailures });
       }
     }
   };
+  function _log (event, msg, element, phase, err, reason, attempt) {
+    if (_logged >= maxFailures) {
+      _omitted++;
+      return;
+    }
+    _logged++;
+    const _isChunk = Array.isArray(element);
+    logger.log('warn', event, msg, {
+      queue    : queueName,
+      op       : op,
+      direction: direction,
+      phase    : phase,
+      key      : _isChunk ? element[0]?.key : element?.key,
+      count    : _isChunk ? element.length : undefined,
+      status   : err?.status,
+      code     : err?.code,
+      reason   : reason,
+      error    : err?.toString(),
+      try      : attempt
+    });
+  }
 }
 
 /** Worker of the upload queues: download from the storage `from`, then upload to the storage `to` */
 function uploadWorker (queueName, from, to, reporter, stats) {
   return function (object, next) {
     const _fail = (phase, err, reason) => {
-      if (reason !== undefined || isPermanentError(phase, err) === true) {
+      if (reason !== undefined || isPermanentError(err) === true) {
         /** Not retried: the queue sees a success, the failure is counted by the reporter */
         reporter.failure(object, phase, err, reason ?? 'permanent');
         return next();
@@ -522,6 +550,15 @@ function uploadWorker (queueName, from, to, reporter, stats) {
     try {
       downloadFile[storages[from].name](storages[from], storages[from].bucket, object?.[from] ?? object?.key, function (err, resp) {
         if (err) {
+          /**
+           * Deleted since the listing (or not yet visible to the GET): skipped, not a failure. No `copied`: its cache is kept and
+           * the next run plans it again from a new listing. A 403 (no ListBucket permission hides a 404) stays a failure
+           */
+          if (err?.status === 404) {
+            stats.skipped++;
+            reporter.skip(object, 'download', err, 'source_gone');
+            return next();
+          }
           return _fail('download', err);
         }
         /** Convert metadata headers */
@@ -609,14 +646,14 @@ function chunkList (list, chunkSize = 1000) {
 }
 
 /**
- * @param {Function} callback (err, stats) stats: { uploaded, uploaded_bytes, deleted, failed }, also given on error
+ * @param {Function} callback (err, stats) stats: { uploaded, uploaded_bytes, deleted, skipped, failed }, also given on error
  * @param {Object} stats optional, the counters to increment: updated live, logged if the run is interrupted
  */
 function syncFiles (filesToUploadTarget, filesToDeleteTarget, filesToUploadSource, filesToDeleteSource, config, callback, stats) {
   const mode = config.mode;
   const _queueOptions = { ...queueOptions, concurrency: config?.transfers ?? 15, delay: 0, retry: config?.retry ?? 0, logQueueStatus: logQueueStatus };
   const _maxFailures = config?.logMaxFailures ?? 100;
-  const _stats = stats ?? { uploaded: 0, uploaded_bytes: 0, deleted: 0, failed: 0 };
+  const _stats = stats ?? { uploaded: 0, uploaded_bytes: 0, deleted: 0, skipped: 0, failed: 0 };
   /** Failed operations of each queue: an Error is returned if any operation failed after retries, or permanently */
   const _syncErrors = [];
   const _endSync = () => callback(_syncErrors.length > 0 ? new Error('Synchronisation errors | ' + _syncErrors.join(' | ')) : undefined, _stats);
@@ -774,6 +811,109 @@ function getInvalidListedField(storageName, object) {
   return null;
 }
 
+/**
+ * Compare two keys in UTF-8 byte order, the order of the S3 and Swift listings (JS `<` compares UTF-16 code units: wrong
+ * for the characters above U+FFFF against U+E000-U+FFFF). The first different code unit decides, unless it is a surrogate:
+ * then the UTF-8 bytes are compared (lone surrogates included).
+ */
+function compareKeys (a, b) {
+  const _length = Math.min(a.length, b.length);
+  let i = 0;
+  while (i < _length && a.charCodeAt(i) === b.charCodeAt(i)) {
+    i++;
+  }
+  const _x = i < a.length ? a.charCodeAt(i) : -1;
+  const _y = i < b.length ? b.charCodeAt(i) : -1;
+  if ((_x >= 0xD800 && _x <= 0xDFFF) || (_y >= 0xD800 && _y <= 0xDFFF) || (i > 0 && a.charCodeAt(i - 1) >= 0xD800 && a.charCodeAt(i - 1) <= 0xDBFF)) {
+    return Buffer.compare(Buffer.from(a, 'utf8'), Buffer.from(b, 'utf8'));
+  }
+  return _x === _y ? 0 : (_x < _y ? -1 : 1);
+}
+
+/**
+ * Bounds of the key ranges of a side, picked among the bounds of its previous listing (`previous`: { objects, bounds }, from
+ * the cache): `listingConcurrency` ranges at most, each of MIN_PAGES_PER_RANGE pages at least. Kept strictly increasing:
+ * any increasing bounds split the keys into ranges without gap nor overlap, they only balance the ranges.
+ * @returns {Object} { bounds } or { reason } of a sequential listing
+ */
+function rangeBounds (previous, pageSize) {
+  if (listingConcurrency < 2) {
+    return { reason: 'concurrency_1' };
+  }
+  if (Array.isArray(previous?.bounds) === false || previous.bounds.length === 0) {
+    return { reason: 'no_cache' };
+  }
+  const _ranges = Math.min(listingConcurrency, Math.floor(previous.objects / (MIN_PAGES_PER_RANGE * pageSize)));
+  const _bounds = [];
+  for (let i = 1; i < _ranges; i++) {
+    const _bound = previous.bounds[Math.round(i * (previous.bounds.length + 1) / _ranges) - 1];
+    if (typeof _bound === 'string' && (_bounds.length === 0 || compareKeys(_bounds[_bounds.length - 1], _bound) < 0)) {
+      _bounds.push(_bound);
+    }
+  }
+  return _bounds.length === 0 ? { reason: 'small' } : { bounds: _bounds };
+}
+
+/** Bounds of the listing recorded in the cache (LISTING_PARTS parts), undefined if too small to be listed by ranges */
+function listingBounds (listing, pageSize) {
+  if (listing.size < MIN_PAGES_PER_RANGE * pageSize * 2) {
+    return undefined;
+  }
+  const _bounds = [];
+  let i = 0;
+  for (const _key of listing.keys()) {
+    if (i++ === Math.floor((_bounds.length + 1) * listing.size / LISTING_PARTS)) {
+      _bounds.push(_key);
+      if (_bounds.length === LISTING_PARTS - 1) {
+        break;
+      }
+    }
+  }
+  return _bounds;
+}
+
+/**
+ * Copy a listed file into a new object holding only the fields used by the sync. With S3, strings parsed by xmlToJson are
+ * slices of the XML page: kept as is, every page listed would stay in memory for the whole synchronisation.
+ * @returns {Object|Error} the file, or an Error if a field required by the sync is missing or invalid
+ */
+function toListedFile (storageName, type, object) {
+  const _invalidField = getInvalidListedField(storageName, object);
+  if (_invalidField !== null) {
+    return new Error(`Invalid listing: a file without a valid "${_invalidField}" was returned by the ${type} storage | ${JSON.stringify(object)}`);
+  }
+  if (storageName === S3) {
+    return {
+      key         : copyString(object.key),
+      md5         : copyString(object.etag.replaceAll("\"", "")),
+      lastmodified: new Date(object.lastmodified).getTime(),
+      bytes       : object.size,
+      /** Token of this side after the last synchronisation, set by the cache: declared here, every object has the same shape */
+      cachedEtag  : undefined,
+      cachedBytes : undefined
+    };
+  }
+  const _lastModified = object.last_modified.includes('Z') === false ? object.last_modified + 'Z' : object.last_modified;
+  return {
+    key         : object.name,
+    md5         : object.hash,
+    lastmodified: new Date(_lastModified).getTime(),
+    bytes       : object.bytes,
+    cachedEtag  : undefined,
+    cachedBytes : undefined
+  };
+}
+
+/**
+ * List both sides. A side whose previous listing is known (`options.listing[side]`: { objects, bounds }, from the cache) is
+ * listed by key ranges in parallel: (-∞, b1], (b1, b2], ..., (bN-1, +∞). Each range starts after its lower bound
+ * (`start-after`, Swift `marker`: exclusive) and ends at its first key above its upper bound, or at the end of the listing.
+ * The ranges are inserted in their order: the Map is the same as a sequential listing (keys in UTF-8 byte order). A range
+ * not strictly increasing (duplicate, unordered page) or not ending at the first key of the next range is never used: the side
+ * is listed again sequentially (`listing_fallback`). A sequential listing returning a key twice (pagination loop) fails.
+ *
+ * @param {Function} callback (err, stats) stats: { source, target } { objects, bytes, ranges, bounds }, bounds of the cache
+ */
 function fetchListFiles(files, options, callback) {
 
   if(!callback) {
@@ -787,66 +927,170 @@ function fetchListFiles(files, options, callback) {
   execQueue(LIST_QUEUE, _listFileStorages,
     function(type, next) {
       const _start = Date.now();
+      const _storage = storages[type];
+      const _storageOptions = options?.[_storage.name];
+      const _pageSize = Number(_storage.name === S3 ? _storageOptions?.queries?.['max-keys'] : _storageOptions?.queries?.limit) || (_storage.name === S3 ? 1000 : 10000);
       let _objects = 0;
       let _bytes = 0;
       let _invalidListing = null;
-      /**
-       * Each listed file is copied into a new object holding only the fields used by the sync, as soon as its page is
-       * received. With S3, strings parsed by xmlToJson are slices of the XML page: kept as is, every page listed would
-       * stay in memory for the whole synchronisation.
-       */
-      const _onPage = (list) => {
-        for (let i = 0; i < list.length; i++) {
-          const _object = list[i];
-          const _invalidField = getInvalidListedField(storages[type].name, _object);
-          if (_invalidField !== null) {
-            _invalidListing = `Invalid listing: a file without a valid "${_invalidField}" was returned by the ${type} storage | ${JSON.stringify(_object)}`;
-            return new Error(_invalidListing);
+      /** Convert the files of a page in order, each given to `add` as soon as its page is received. Returns an Error if one is invalid or refused by `add` */
+      const _convert = (list, end, add) => {
+        for (let i = 0; i < end; i++) {
+          const _file = toListedFile(_storage.name, type, list[i]);
+          const _invalid = Error.isError(_file) === true ? _file : add(_file);
+          if (Error.isError(_invalid) === true) {
+            _invalidListing = _invalid.message;
+            return _invalid;
           }
-          const _key = _object?.key ?? _object?.name;
-          let _file = null;
-          if (storages[type].name === S3) {
-            _file = {
-              key         : copyString(_key),
-              md5         : copyString(_object.etag.replaceAll("\"", "")),
-              lastmodified: new Date(_object.lastmodified).getTime(),
-              bytes       : _object.size,
-              /** Token of this side after the last synchronisation, set by the cache: declared here, every object has the same shape */
-              cachedEtag  : undefined,
-              cachedBytes : undefined
-            };
-          }
-          if (storages[type].name === SWIFT) {
-            const _lastModified = _object.last_modified.includes('Z') === false ? _object.last_modified + 'Z' : _object.last_modified;
-            _file = {
-              key         : _key,
-              md5         : _object.hash,
-              lastmodified: new Date(_lastModified).getTime(),
-              bytes       : _object.bytes,
-              cachedEtag  : undefined,
-              cachedBytes : undefined
-            };
-          }
-          files[type].set(_file.key, _file);
           _bytes += Number(_file.bytes) || 0;
         }
-        _objects += list.length;
+        _objects += end;
       };
+      const _add = (file) => files[type].set(file.key, file);
       /** The queries are copied: the pagination marker of a listing must not leak into the next one */
-      const _listOptions = { autoPaging: true, ...options?.[storages[type].name], queries: { ...options?.[storages[type].name]?.queries }, onPage: _onPage };
-      return listFiles[storages[type].name](storages[type], storages[type].bucket, _listOptions, (err) => {
+      const _list = (queries, onPage, done) => listFiles[_storage.name](_storage, _storage.bucket, { autoPaging: true, ..._storageOptions, queries: { ..._storageOptions?.queries, ...queries }, onPage }, done);
+      /** A key listed twice: the server loops (pagination ignored), the listing would never end */
+      const _addOnce = (file) => (files[type].has(file.key) === true ? new Error(`Invalid listing: the key ${JSON.stringify(file.key)} is listed twice, the pagination loops | Bucket: ${_storage.bucket}`) : _add(file));
+      const _listSequential = (done) => _list({}, (list) => _convert(list, list.length, _addOnce), (err) => done(err, 1));
+      const _listRanges = (bounds, done) => {
+        const _ranges = [];
+        let _pending = bounds.length + 1;
+        let _error = null;
+        let _invalid = null;
+        /**
+         * The ranges are inserted into the Map in their order, as soon as the previous ones are done: the first range not done
+         * (`_head`) inserts its files directly, the next ones keep theirs until then. Each insertion of a range starts above
+         * the last key inserted: the Map is strictly increasing, as a sequential listing.
+         */
+        let _head = 0;
+        let _lastKey;
+        /**
+         * Ranges 2..N start once the first page of range 1 is checked: a server ignoring the page size returns the rest of the
+         * bucket to each range, a single huge page is read before the sequential listing, not N. Costs one request of latency
+         */
+        let _started = false;
+        const _startNext = () => {
+          if (_started === true) {
+            return;
+          }
+          _started = true;
+          if (_error !== null || _invalid !== null) {
+            /** Range 1 failed or is invalid: the next ones are never started, only range 1 is pending */
+            _pending = 1;
+            return;
+          }
+          _ranges.slice(1).forEach((range) => range.start());
+        };
+        const _insert = (range, file) => {
+          if (_ranges[range].inserted === false && _lastKey !== undefined && compareKeys(_lastKey, file.key) >= 0) {
+            _invalid ??= `range ${range + 1}/${bounds.length + 1} overlaps the previous one`;
+          }
+          _ranges[range].inserted = true;
+          _add(file);
+          _lastKey = file.key;
+        };
+        for (let r = 0; r <= bounds.length; r++) {
+          /**
+           * `last`: last key read by the range, starting at its lower bound (a copy: a parsed key holds its whole page). `first`: first
+           * key returned, `cut`: key above the upper bound that stopped the range (undefined: empty, end of the listing)
+           */
+          const _range = { last: bounds[r - 1], upper: bounds[r], first: undefined, cut: undefined, files: [], done: false, inserted: false };
+          const _push = (file) => (r === _head ? _insert(r, file) : _range.files.push(file));
+          _ranges.push(_range);
+          const _onPage = (list) => {
+            /** Another range failed: stop */
+            if (_error !== null || _invalid !== null) {
+              return true;
+            }
+            /** Page size ignored by the server: the ranges in flight would hold as many huge pages, listed sequentially instead */
+            if (list.length > 2 * _pageSize) {
+              _invalid = 'oversized_page';
+              return true;
+            }
+            let _end = list.length;
+            let _previous = _range.last;
+            for (let i = 0; i < list.length; i++) {
+              const _key = _storage.name === S3 ? list[i]?.key : list[i]?.name;
+              /** Not a key: reported by the conversion, as a sequential listing */
+              if (typeof _key !== 'string') {
+                break;
+              }
+              if (_previous !== undefined && compareKeys(_previous, _key) >= 0) {
+                _invalid = `range ${r + 1}/${bounds.length + 1} not strictly increasing in UTF-8 byte order`;
+                return true;
+              }
+              _previous = _key;
+              _range.first ??= _storage.name === S3 ? copyString(_key) : _key;
+              /** Above the upper bound: listed by the next range. The rest of the page is checked, never dropped unordered */
+              if (_end === list.length && _range.upper !== undefined && compareKeys(_key, _range.upper) > 0) {
+                _end = i;
+                _range.cut = _storage.name === S3 ? copyString(_key) : _key;
+              }
+            }
+            const _result = _convert(list, _end, _push) ?? (_end < list.length ? true : undefined);
+            /** Copied key of the last file kept: the next page of the range starts above it */
+            _range.last = _end > 0 && _result === undefined ? (_storage.name === S3 ? copyString(_previous) : _previous) : _range.last;
+            return _result;
+          };
+          _range.start = () => _list(r === 0 ? {} : { [_storage.name === S3 ? 'start-after' : 'marker']: bounds[r - 1] }, r > 0 ? _onPage : (list) => {
+            const _result = _onPage(list);
+            _startNext();
+            return _result;
+          }, (err) => {
+            _error ??= err ?? null;
+            _startNext();
+            _range.done = true;
+            while (_error === null && _invalid === null && _ranges[_head]?.done === true) {
+              _head++;
+              /** The next range becomes the first not done: its files kept so far are inserted */
+              if (_head < _ranges.length) {
+                _ranges[_head].files.forEach((file) => _insert(_head, file));
+                _ranges[_head].files = [];
+              }
+            }
+            if (--_pending > 0) {
+              return;
+            }
+            /**
+             * Contiguity, whatever the order of the server: each range stopped at the first key returned by the next one (or both
+             * at the end of the listing). Otherwise a key may lie between them (server order not UTF-8, bucket changed meanwhile)
+             */
+            for (let i = 1; _error === null && _invalid === null && i < _ranges.length; i++) {
+              if (_ranges[i - 1].cut !== _ranges[i].first) {
+                _invalid = `range ${i}/${_ranges.length} does not end at the first key of the next range`;
+              }
+            }
+            return done(_error, _error === null && _invalid === null ? _ranges.length : undefined, _error === null ? _invalid : null);
+          });
+        }
+        _ranges[0].start();
+      };
+      const _done = (err, ranges, invalid) => {
+        if (invalid) {
+          files[type].clear();
+          logger.log('warn', 'listing_fallback', `${type} listing by ranges invalid, listed again sequentially`, { side: type, storage: _storage.name, bucket: _storage.bucket, reason: invalid });
+          _objects = 0;
+          _bytes = 0;
+          return _listSequential(_done);
+        }
         if (err) {
           _listFileError = _invalidListing ?? err.toString();
           /** A side partially listed must never be used */
           files[type].clear();
           return next(err);
         }
-        _stats[type] = { objects: _objects, bytes: _bytes };
+        _stats[type] = { objects: _objects, bytes: _bytes, ranges: ranges, bounds: listingBounds(files[type], _pageSize) };
         logger.log('info', 'listing_done', `${type} listed`, {
-          side: type, storage: storages[type].name, bucket: storages[type].bucket, objects: _objects, bytes: _bytes, duration_ms: Date.now() - _start
+          side: type, storage: _storage.name, bucket: _storage.bucket, objects: _objects, bytes: _bytes, duration_ms: Date.now() - _start, ranges: ranges
         });
         return next();
-      });
+      };
+      const { bounds, reason } = rangeBounds(options?.listing?.[type], _pageSize);
+      if (reason !== undefined) {
+        logger.log('debug', 'listing_sequential', `${type} listed sequentially`, { side: type, storage: _storage.name, bucket: _storage.bucket, reason: reason });
+        return _listSequential(_done);
+      }
+      return _listRanges(bounds, _done);
     },
     /** No retry of the whole listing: each page is already retried, and the result of a retry was ignored */
     { ...queueOptions, concurrency: 2, retry: 0, logQueueStatus: logQueueStatus },
@@ -959,5 +1203,6 @@ module.exports = {
   resolveEtags,
   confirmDeletions,
   convertHeaders,
-  getDeletionRefusal
+  getDeletionRefusal,
+  compareKeys
 };

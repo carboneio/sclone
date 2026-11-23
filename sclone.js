@@ -153,7 +153,7 @@ function beginRun (config) {
         dry_run: config.dryRun,
         cron   : !!config.cron
     });
-    currentRun = { start: Date.now(), stats: { uploaded: 0, uploaded_bytes: 0, deleted: 0, failed: 0 } };
+    currentRun = { start: Date.now(), stats: { uploaded: 0, uploaded_bytes: 0, deleted: 0, skipped: 0, failed: 0 } };
     return currentRun;
 }
 
@@ -205,7 +205,8 @@ function startSync(config, run, callback) {
   };
   const _cachePath = helper.resolveCachePath(config.cacheFilename);
   const _cacheHeader = helper.cacheHeader(config);
-  storage.fetchListFiles(files, (err, listing) => {
+  /** The bounds of the previous listings are read first: the sides are listed by key ranges in parallel */
+  helper.readCacheListing(_cachePath, _cacheHeader, (previousListing) => storage.fetchListFiles(files, { listing: previousListing }, (err, listing) => {
     if (err) {
       return callback(err);
     }
@@ -264,7 +265,7 @@ function startSync(config, run, callback) {
             /** Saved even if some operations failed: the done ones are recorded, the failed ones keep their previous entry */
             logic.updateCache(files, plan);
             const _saveStart = Date.now();
-            helper.saveCache(_cachePath, _cacheHeader, files, (saveErr, entries) => {
+            helper.saveCache(_cachePath, cacheHeaderWithListing(_cacheHeader, listing), files, (saveErr, entries) => {
               if (saveErr) {
                 _errors.push(saveErr.toString());
               } else {
@@ -276,7 +277,18 @@ function startSync(config, run, callback) {
         });
       });
     });
-  });
+  }));
+}
+
+/** Header of the cache with the bounds of the listings, for the key ranges of the next run. Unchanged for small listings */
+function cacheHeaderWithListing (header, listing) {
+  const _listing = {};
+  for (const _side of ['source', 'target']) {
+    if (listing?.[_side]?.bounds !== undefined) {
+      _listing[_side] = { objects: listing[_side].objects, bounds: listing[_side].bounds };
+    }
+  }
+  return Object.keys(_listing).length === 0 ? header : { ...header, listing: _listing };
 }
 
 /** Compute the plan, after resolving with a HEAD the opaque etags it needs (OVH encrypted objects): once per changed object */
